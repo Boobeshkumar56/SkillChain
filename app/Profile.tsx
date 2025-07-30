@@ -1,0 +1,575 @@
+import { AlertCircle, Award, Calendar, CheckCircle, Github, Globe, MapPin, Pencil, Plus, Trash2 } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { Animated, Image, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
+
+const defaultAvatar = 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y';
+
+// Custom Toast Component for Cross-Platform Support
+const CustomToast = ({ visible, message, type = 'success', theme, onHide }) => {
+  const [fadeAnim] = useState(new Animated.Value(0));
+
+  React.useEffect(() => {
+    if (visible) {
+      Animated.sequence([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.delay(2000),
+        Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true })
+      ]).start(() => onHide());
+    }
+  }, [visible]);
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View style={[
+      getStyles(theme).toast, 
+      { 
+        opacity: fadeAnim,
+        borderLeftColor: type === 'success' ? '#10B981' : '#EF4444'
+      }
+    ]}>
+      {type === 'success' ? <CheckCircle size={16} color="#10B981" /> : <AlertCircle size={16} color="#EF4444" />}
+      <Text style={getStyles(theme).toastText}>{message}</Text>
+    </Animated.View>
+  );
+};
+
+export default function Profile({ theme = 'dark', showToast }) {
+  const [bio, setBio] = useState('Passionate developer crafting digital experiences with cutting-edge technologies');
+  const [editingBio, setEditingBio] = useState(false);
+  const [skills, setSkills] = useState(['React Native', 'Firebase', 'Node.js', 'TypeScript']);
+  const [newSkill, setNewSkill] = useState('');
+  const [skillModalVisible, setSkillModalVisible] = useState(false);
+  const [projects, setProjects] = useState([
+    {
+      id: '1',
+      title: 'SkillChain',
+      description: 'Revolutionary mutual skill-sharing platform with real-time matching',
+      github: 'https://github.com/yourrepo/skillchain',
+      live: 'https://skillchain.app'
+    },
+  ]);
+  const [projectModalVisible, setProjectModalVisible] = useState(false);
+  const [newProject, setNewProject] = useState({ title: '', description: '', github: '', live: '' });
+  
+  // Toast state
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+
+  const handleShowToast = (message, type = 'success') => {
+    if (showToast) {
+      showToast(message, type);
+    } else if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+    } else {
+      setToast({ visible: true, message, type });
+    }
+  };
+
+  const addSkill = () => {
+    if (!newSkill.trim()) {
+      handleShowToast('Please enter a skill', 'error');
+      return;
+    }
+    if (skills.includes(newSkill.trim())) {
+      handleShowToast('Skill already exists', 'error');
+      return;
+    }
+    setSkills([...skills, newSkill.trim()]);
+    setNewSkill('');
+    setSkillModalVisible(false);
+    handleShowToast('Skill added successfully!');
+  };
+
+  const removeSkill = (skillToRemove) => {
+    setSkills(skills.filter(skill => skill !== skillToRemove));
+    handleShowToast('Skill removed');
+  };
+
+  const addProject = () => {
+    if (!newProject.title || !newProject.description || !newProject.github) {
+      handleShowToast('Please fill all required fields', 'error');
+      return;
+    }
+    setProjects([...projects, { ...newProject, id: Date.now().toString() }]);
+    setNewProject({ title: '', description: '', github: '', live: '' });
+    setProjectModalVisible(false);
+    handleShowToast('Project added successfully!');
+  };
+
+  const styles = getStyles(theme);
+
+  return (
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Hero Profile Section */}
+      <View style={styles.heroSection}>
+        <View style={styles.avatarContainer}>
+          <Image source={{ uri: defaultAvatar }} style={styles.avatar} />
+          <View style={styles.statusDot} />
+        </View>
+        <Text style={styles.name}>Boobesh Kumar</Text>
+        <Text style={styles.title}>Full Stack Developer</Text>
+        <View style={styles.locationRow}>
+          <MapPin size={14} color={theme === 'dark' ? '#8B5CF6' : '#EF4444'} />
+          <Text style={styles.location}>San Francisco, CA</Text>
+          <Calendar size={14} color={theme === 'dark' ? '#8B5CF6' : '#EF4444'} style={{marginLeft: 16}} />
+          <Text style={styles.joinDate}>Joined 2023</Text>
+        </View>
+      </View>
+
+      {/* Stats Row */}
+      <View style={styles.statsContainer}>
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>24</Text>
+          <Text style={styles.statLabel}>Projects</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>1.2k</Text>
+          <Text style={styles.statLabel}>Followers</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={styles.statNumber}>856</Text>
+          <Text style={styles.statLabel}>Following</Text>
+        </View>
+      </View>
+
+      {/* Bio Section */}
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>About</Text>
+          <TouchableOpacity onPress={() => setEditingBio(true)} style={styles.editBtn}>
+            <Pencil size={16} color={theme === 'dark' ? '#8B5CF6' : '#EF4444'} />
+          </TouchableOpacity>
+        </View>
+        {editingBio ? (
+          <TextInput
+            value={bio}
+            onChangeText={setBio}
+            maxLength={200}
+            style={styles.bioInput}
+            onBlur={() => setEditingBio(false)}
+            multiline
+            placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
+          />
+        ) : (
+          <Text style={styles.bioText}>{bio}</Text>
+        )}
+      </View>
+
+      {/* Skills Section */}
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>Skills & Expertise</Text>
+          <TouchableOpacity onPress={() => setSkillModalVisible(true)} style={styles.addBtn}>
+            <Plus size={16} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.skillGrid}>
+          {skills.map((skill, index) => (
+            <TouchableOpacity key={index} onPress={() => removeSkill(skill)} style={styles.skillChip}>
+              <Text style={styles.skillText}>{skill}</Text>
+              <Trash2 size={12} color={theme === 'dark' ? '#8B5CF6' : '#EF4444'} style={{marginLeft: 8}} />
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* Projects Section */}
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle}>Featured Projects</Text>
+          <TouchableOpacity onPress={() => setProjectModalVisible(true)} style={styles.addBtn}>
+            <Plus size={16} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        {projects.map(project => (
+          <View key={project.id} style={styles.projectCard}>
+            <View style={styles.projectHeader}>
+              <Award size={20} color={theme === 'dark' ? '#8B5CF6' : '#EF4444'} />
+              <Text style={styles.projectTitle}>{project.title}</Text>
+            </View>
+            <Text style={styles.projectDescription}>{project.description}</Text>
+            <View style={styles.projectLinks}>
+              <TouchableOpacity onPress={() => Linking.openURL(project.github)} style={styles.linkBtn}>
+                <Github size={16} color="#fff" />
+                <Text style={styles.linkText}>Code</Text>
+              </TouchableOpacity>
+              {project.live && (
+                <TouchableOpacity onPress={() => Linking.openURL(project.live)} style={[styles.linkBtn, styles.liveBtn]}>
+                  <Globe size={16} color="#fff" />
+                  <Text style={styles.linkText}>Live</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        ))}
+      </View>
+
+      {/* Modals */}
+      <Modal visible={skillModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Add New Skill</Text>
+            <TextInput
+              placeholder="e.g., React, Python, Design..."
+              placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
+              value={newSkill}
+              onChangeText={setNewSkill}
+              style={styles.modalInput}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={() => setSkillModalVisible(false)} style={styles.cancelBtn}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={addSkill} style={styles.saveBtn}>
+                <Text style={styles.saveText}>Add Skill</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={projectModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Add New Project</Text>
+            <TextInput 
+              placeholder="Project Title" 
+              placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
+              value={newProject.title} 
+              onChangeText={text => setNewProject({ ...newProject, title: text })} 
+              style={styles.modalInput} 
+            />
+            <TextInput 
+              placeholder="Project Description" 
+              placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
+              value={newProject.description} 
+              onChangeText={text => setNewProject({ ...newProject, description: text })} 
+              style={styles.modalInput} 
+              multiline 
+            />
+            <TextInput 
+              placeholder="GitHub Repository URL" 
+              placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
+              value={newProject.github} 
+              onChangeText={text => setNewProject({ ...newProject, github: text })} 
+              style={styles.modalInput} 
+            />
+            <TextInput 
+              placeholder="Live Demo URL (Optional)" 
+              placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
+              value={newProject.live} 
+              onChangeText={text => setNewProject({ ...newProject, live: text })} 
+              style={styles.modalInput} 
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={() => setProjectModalVisible(false)} style={styles.cancelBtn}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={addProject} style={styles.saveBtn}>
+                <Text style={styles.saveText}>Add Project</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Custom Toast for Web */}
+      <CustomToast 
+        visible={toast.visible} 
+        message={toast.message} 
+        type={toast.type}
+        theme={theme}
+        onHide={() => setToast({ ...toast, visible: false })} 
+      />
+    </ScrollView>
+  );
+}
+
+const getStyles = (theme) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme === 'dark' ? '#0F0F23' : '#F8FAFC',
+  },
+  heroSection: {
+    alignItems: 'center',
+    paddingTop: 60,
+    paddingBottom: 30,
+    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 4,
+    borderColor: theme === 'dark' ? '#fff' : '#E5E7EB',
+  },
+  statusDot: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#10B981',
+    borderWidth: 3,
+    borderColor: theme === 'dark' ? '#fff' : '#E5E7EB',
+  },
+  name: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: theme === 'dark' ? '#fff' : '#111827',
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 16,
+    color: theme === 'dark' ? '#E5E7EB' : '#6B7280',
+    marginBottom: 12,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  location: {
+    color: theme === 'dark' ? '#E5E7EB' : '#6B7280',
+    fontSize: 14,
+    marginLeft: 4,
+  },
+  joinDate: {
+    color: theme === 'dark' ? '#E5E7EB' : '#6B7280',
+    fontSize: 14,
+    marginLeft: 4,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
+    marginHorizontal: 20,
+    borderRadius: 16,
+    padding: 20,
+    marginTop: -20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: theme === 'dark' ? 0.3 : 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: theme === 'dark' ? '#374151' : '#E5E7EB',
+    marginHorizontal: 20,
+  },
+  card: {
+    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme === 'dark' ? 0.1 : 0.05,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme === 'dark' ? '#F9FAFB' : '#111827',
+  },
+  editBtn: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: theme === 'dark' ? '#374151' : '#F3F4F6',
+  },
+  addBtn: {
+    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+    padding: 8,
+    borderRadius: 8,
+  },
+  bioText: {
+    color: theme === 'dark' ? '#D1D5DB' : '#4B5563',
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  bioInput: {
+    color: theme === 'dark' ? '#F9FAFB' : '#111827',
+    fontSize: 16,
+    borderBottomWidth: 2,
+    borderColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+    paddingBottom: 8,
+  },
+  skillGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  skillChip: {
+    flexDirection: 'row',
+    backgroundColor: theme === 'dark' ? '#374151' : '#F3F4F6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme === 'dark' ? '#4B5563' : '#E5E7EB',
+  },
+  skillText: {
+    color: theme === 'dark' ? '#E5E7EB' : '#374151',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  projectCard: {
+    backgroundColor: theme === 'dark' ? '#374151' : '#F9FAFB',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+  },
+  projectHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  projectTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: theme === 'dark' ? '#F9FAFB' : '#111827',
+    marginLeft: 8,
+  },
+  projectDescription: {
+    color: theme === 'dark' ? '#D1D5DB' : '#4B5563',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  projectLinks: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  linkBtn: {
+    flexDirection: 'row',
+    backgroundColor: theme === 'dark' ? '#4B5563' : '#6B7280',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  liveBtn: {
+    backgroundColor: '#10B981',
+  },
+  linkText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
+    marginLeft: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modal: {
+    width: '90%',
+    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: theme === 'dark' ? '#F9FAFB' : '#111827',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalInput: {
+    backgroundColor: theme === 'dark' ? '#374151' : '#F3F4F6',
+    color: theme === 'dark' ? '#F9FAFB' : '#111827',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    fontSize: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: theme === 'dark' ? '#4B5563' : '#E5E7EB',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelText: {
+    color: theme === 'dark' ? '#D1D5DB' : '#374151',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  saveBtn: {
+    flex: 1,
+    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  saveText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  toast: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    right: 20,
+    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 9999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    borderLeftWidth: 4,
+  },
+  toastText: {
+    color: theme === 'dark' ? '#F9FAFB' : '#111827',
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+    flex: 1,
+  },
+});
