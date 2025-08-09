@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "820846877419",
+    "project_id": "skillchain-951db",
+    "storage_bucket": "skillchain-951db.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:820846877419:android:c35cc392df350bcf233cae",
+        "android_client_info": {
+          "package_name": "com.boobesh.skillchain"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "820846877419-i9gedep49rdfcem000pgius2fd50nsm5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.boobesh.skillchain",
+            "certificate_hash": "8af10c1add2257db646d0cb483e2eb05af574958"
+          }
+        },
+        {
+          "client_id": "820846877419-98s233ftgn31mglddgj6cotm32hs8lj1.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB_Z0qryREo1oQkgjl0AhJDHeLIQz_FwL4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "820846877419-98s233ftgn31mglddgj6cotm32hs8lj1.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

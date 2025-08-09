@@ -1,18 +1,39 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-    Award,
-    BookOpen,
-    CheckCircle,
-    Clock,
-    Filter,
-    MapPin,
-    Search,
-    Send,
-    Star, Target,
-    Users,
-    Zap
+  Award,
+  Bot,
+  Briefcase,
+  CheckCircle,
+  Clock,
+  Code,
+  Filter,
+  GraduationCap,
+  Heart,
+  MapPin,
+  MessageCircle,
+  Search,
+  Send,
+  Settings,
+  Star,
+  Target,
+  UserPlus,
+  Users,
+  X,
+  Zap
 } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  FlatList,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
+
+const API_URL = process.env.API_URL || "http://localhost:5000/api/auth";
 
 interface ConnectProps {
   theme: 'dark' | 'light';
@@ -20,344 +41,770 @@ interface ConnectProps {
 }
 
 interface User {
-  id: number;
+  _id: string;
   name: string;
-  avatar: string;
-  location: string;
-  knows: string[];
-  wants: string[];
-  teaches: string[];
-  matchScore: number;
-  rating: number;
+  email: string;
+  selectedRole: string;
+  experienceLevel: string;
+  bio?: string;
+  photoURL?: string;
+  knownSkills: Array<{
+    skill: string;
+    level: string;
+    yearsOfExperience: number;
+  }>;
+  location?: string;
   connections: number;
-  isConnected?: boolean;
-  lastActive: string;
-  projects: number;
-  expertise: string;
+  isActive: boolean;
+  lastSeen: string;
+  matchScore?: number;
+  connectionStatus?: 'none' | 'pending' | 'connected' | 'blocked';
+}
+
+interface ChatMessage {
+  _id: string;
+  sender: string;
+  receiver: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+}
+
+interface Connection {
+  _id: string;
+  user: User;
+  status: 'pending' | 'connected' | 'blocked';
+  createdAt: string;
+  lastMessage?: ChatMessage;
 }
 
 const Connect: React.FC<ConnectProps> = ({ theme, showToast }) => {
+  const [users, setUsers] = useState<User[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState('all');
-  const [users, setUsers] = useState<User[]>([
-    {
-      id: 1,
-      name: 'Sarah Wilson',
-      avatar: 'https://www.gravatar.com/avatar/3?d=mp&f=y',
-      location: 'San Francisco, CA',
-      knows: ['React', 'TypeScript', 'GraphQL', 'Node.js'],
-      wants: ['Machine Learning', 'Python', 'TensorFlow'],
-      teaches: ['Frontend Development', 'UI/UX Design', 'React Native'],
-      matchScore: 95,
-      rating: 4.8,
-      connections: 150,
-      isConnected: false,
-      lastActive: '2 hours ago',
-      projects: 12,
-      expertise: 'Senior Frontend Developer'
-    },
-    {
-      id: 2,
-      name: 'Michael Brown',
-      avatar: 'https://www.gravatar.com/avatar/4?d=mp&f=y',
-      location: 'New York, NY',
-      knows: ['Python', 'Django', 'PostgreSQL', 'AWS'],
-      wants: ['React Native', 'Mobile Development', 'Flutter'],
-      teaches: ['Backend Development', 'Database Design', 'DevOps'],
-      matchScore: 87,
-      rating: 4.6,
-      connections: 89,
-      isConnected: true,
-      lastActive: '1 hour ago',
-      projects: 8,
-      expertise: 'Full Stack Developer'
-    },
-    {
-      id: 3,
-      name: 'Emily Chen',
-      avatar: 'https://www.gravatar.com/avatar/5?d=mp&f=y',
-      location: 'Toronto, ON',
-      knows: ['Java', 'Spring Boot', 'Microservices', 'Docker'],
-      wants: ['Kubernetes', 'Cloud Architecture', 'Go'],
-      teaches: ['Java Development', 'System Design', 'Architecture'],
-      matchScore: 78,
-      rating: 4.7,
-      connections: 203,
-      isConnected: false,
-      lastActive: '30 minutes ago',
-      projects: 15,
-      expertise: 'Senior Backend Engineer'
-    },
-    {
-      id: 4,
-      name: 'Alex Rodriguez',
-      avatar: 'https://www.gravatar.com/avatar/6?d=mp&f=y',
-      location: 'London, UK',
-      knows: ['JavaScript', 'Vue.js', 'Firebase', 'MongoDB'],
-      wants: ['React', 'Next.js', 'TypeScript'],
-      teaches: ['Vue.js', 'Frontend Architecture', 'Web Performance'],
-      matchScore: 82,
-      rating: 4.5,
-      connections: 67,
-      isConnected: false,
-      lastActive: '5 minutes ago',
-      projects: 9,
-      expertise: 'Frontend Specialist'
-    }
-  ]);
-
-  const handleConnect = (userId: number) => {
-    setUsers(users.map(user => {
-      if (user.id === userId) {
-        const newConnectedState = !user.isConnected;
-        showToast(
-          newConnectedState ? 'Connection request sent!' : 'Connection removed', 
-          'success'
-        );
-        return {
-          ...user,
-          isConnected: newConnectedState,
-          connections: newConnectedState ? user.connections + 1 : user.connections - 1
-        };
-      }
-      return user;
-    }));
-  };
-
-  const handleMessage = (userName: string) => {
-    showToast(`Opening chat with ${userName}...`, 'success');
-  };
-
-  const handleAIMatch = () => {
-    showToast('🤖 AI is finding your perfect matches...', 'success');
-    // Simulate AI matching delay
-    setTimeout(() => {
-      showToast('✨ Found 3 new potential matches!', 'success');
-    }, 2000);
-  };
-
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         user.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         user.knows.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                         user.wants.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                         user.teaches.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    if (activeFilter === 'all') return matchesSearch;
-    if (activeFilter === 'connected') return matchesSearch && user.isConnected;
-    if (activeFilter === 'available') return matchesSearch && !user.isConnected;
-    return matchesSearch;
+  const [activeTab, setActiveTab] = useState<'discover' | 'connections' | 'requests'>('discover');
+  
+  // Filter states
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [filters, setFilters] = useState({
+    role: 'all',
+    experienceLevel: 'all',
+    skills: '',
+    location: ''
   });
+
+  // Chat states
+  const [chatModalVisible, setChatModalVisible] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+
+  // AI Matching states
+  const [aiMatchingVisible, setAiMatchingVisible] = useState(false);
+  const [aiMatches, setAiMatches] = useState<User[]>([]);
+  const [matchingProgress, setMatchingProgress] = useState(0);
+
+  const roleIcons = {
+    'Frontend Developer': Code,
+    'Backend Developer': Briefcase,
+    'Full Stack Developer': Target,
+    'Mobile Developer': Settings,
+    'Data Scientist': Award,
+    'DevOps Engineer': Zap,
+    'UI/UX Designer': Heart,
+    'Student': GraduationCap,
+    'Other': Users
+  };
+
+  useEffect(() => {
+    fetchUsers();
+    fetchConnections();
+  }, []);
+
+  useEffect(() => {
+    if (filters.role !== 'all' || filters.experienceLevel !== 'all' || filters.skills || filters.location || searchQuery) {
+      fetchUsers();
+    }
+  }, [filters, searchQuery]);
+
+  const fetchUsers = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const queryParams = new URLSearchParams({
+        page: '1',
+        limit: '50',
+        ...(filters.role !== 'all' && { role: filters.role }),
+        ...(filters.experienceLevel !== 'all' && { experienceLevel: filters.experienceLevel }),
+        ...(filters.skills && { skills: filters.skills }),
+        ...(filters.location && { location: filters.location }),
+        ...(searchQuery && { search: searchQuery })
+      });
+
+      const response = await fetch(`${API_URL}/users?${queryParams}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setUsers(data.users || []);
+      } else {
+        showToast('Failed to fetch users', 'error');
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      showToast('Error loading users', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchConnections = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/connections`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setConnections(data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching connections:', error);
+    }
+  };
+
+  const startAIMatching = async () => {
+    setAiMatchingVisible(true);
+    setMatchingProgress(0);
+
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      // Simulate AI matching progress
+      const progressInterval = setInterval(() => {
+        setMatchingProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
+
+      const response = await fetch(`${API_URL}/ai-match`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      clearInterval(progressInterval);
+      setMatchingProgress(100);
+
+      if (response.ok) {
+        const data = await response.json();
+        setAiMatches(data.matches || []);
+        setTimeout(() => {
+          setMatchingProgress(0);
+        }, 500);
+      } else {
+        showToast('AI matching failed', 'error');
+        setAiMatchingVisible(false);
+      }
+    } catch (error) {
+      console.error('Error in AI matching:', error);
+      showToast('AI matching error', 'error');
+      setAiMatchingVisible(false);
+    }
+  };
+
+  const sendConnectionRequest = async (userId: string) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/connect-request`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      if (response.ok) {
+        showToast('Connection request sent!');
+        fetchUsers();
+        fetchConnections();
+      } else {
+        const errorData = await response.json();
+        showToast(errorData.message || 'Failed to send connection request', 'error');
+      }
+    } catch (error) {
+      console.error('Error sending connection request:', error);
+      showToast('Error sending connection request', 'error');
+    }
+  };
+
+  const acceptConnectionRequest = async (userId: string) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/accept-connection`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      if (response.ok) {
+        showToast('Connection request accepted!');
+        fetchConnections();
+      } else {
+        showToast('Failed to accept connection request', 'error');
+      }
+    } catch (error) {
+      console.error('Error accepting connection request:', error);
+      showToast('Error accepting connection request', 'error');
+    }
+  };
+
+  const startChat = async (user: User) => {
+    setSelectedUser(user);
+    setChatModalVisible(true);
+    await fetchChatMessages(user._id);
+  };
+
+  const fetchChatMessages = async (userId: string) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/chat/${userId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setChatMessages(data.messages || []);
+      }
+    } catch (error) {
+      console.error('Error fetching chat messages:', error);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !selectedUser) return;
+
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/chat`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          receiverId: selectedUser._id,
+          message: newMessage.trim()
+        }),
+      });
+
+      if (response.ok) {
+        setNewMessage('');
+        await fetchChatMessages(selectedUser._id);
+      } else {
+        showToast('Failed to send message', 'error');
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      showToast('Error sending message', 'error');
+    }
+  };
+
+  const renderRoleIcon = (role: string) => {
+    const IconComponent = roleIcons[role as keyof typeof roleIcons] || Users;
+    return <IconComponent size={16} color={theme === 'dark' ? '#8B5CF6' : '#EF4444'} />;
+  };
+
+  const renderUser = ({ item: user }: { item: User }) => (
+    <View style={styles.userCard}>
+      <View style={styles.userHeader}>
+        <View style={styles.userAvatar}>
+          <Text style={styles.userAvatarText}>
+            {user.name.charAt(0).toUpperCase()}
+          </Text>
+          {user.isActive && <View style={styles.activeIndicator} />}
+        </View>
+        <View style={styles.userInfo}>
+          <View style={styles.userNameRow}>
+            <Text style={styles.userName}>{user.name}</Text>
+            {user.matchScore && (
+              <View style={styles.matchBadge}>
+                <Star size={10} color="#F59E0B" fill="#F59E0B" />
+                <Text style={styles.matchScore}>{user.matchScore}%</Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.userRoleRow}>
+            {renderRoleIcon(user.selectedRole)}
+            <Text style={styles.userRole}>{user.selectedRole}</Text>
+          </View>
+          <Text style={styles.userExperience}>{user.experienceLevel}</Text>
+          {user.location && (
+            <View style={styles.locationRow}>
+              <MapPin size={12} color={theme === 'dark' ? '#9CA3AF' : '#6B7280'} />
+              <Text style={styles.userLocation}>{user.location}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {user.bio && (
+        <Text style={styles.userBio} numberOfLines={2}>{user.bio}</Text>
+      )}
+
+      <View style={styles.skillsContainer}>
+        {user.knownSkills.slice(0, 3).map((skill, index) => (
+          <View key={index} style={styles.skillChip}>
+            <Text style={styles.skillText}>{skill.skill}</Text>
+          </View>
+        ))}
+        {user.knownSkills.length > 3 && (
+          <Text style={styles.moreSkills}>+{user.knownSkills.length - 3} more</Text>
+        )}
+      </View>
+
+      <View style={styles.userActions}>
+        {user.connectionStatus === 'connected' ? (
+          <TouchableOpacity 
+            style={[styles.actionBtn, styles.chatBtn]}
+            onPress={() => startChat(user)}
+          >
+            <MessageCircle size={16} color="#fff" />
+            <Text style={styles.actionBtnText}>Chat</Text>
+          </TouchableOpacity>
+        ) : user.connectionStatus === 'pending' ? (
+          <View style={[styles.actionBtn, styles.pendingBtn]}>
+            <Clock size={16} color={theme === 'dark' ? '#F59E0B' : '#D97706'} />
+            <Text style={[styles.actionBtnText, { color: theme === 'dark' ? '#F59E0B' : '#D97706' }]}>
+              Pending
+            </Text>
+          </View>
+        ) : (
+          <TouchableOpacity 
+            style={[styles.actionBtn, styles.connectBtn]}
+            onPress={() => sendConnectionRequest(user._id)}
+          >
+            <UserPlus size={16} color="#fff" />
+            <Text style={styles.actionBtnText}>Connect</Text>
+          </TouchableOpacity>
+        )}
+        
+        <TouchableOpacity style={[styles.actionBtn, styles.viewBtn]}>
+          <Text style={[styles.actionBtnText, { color: theme === 'dark' ? '#8B5CF6' : '#EF4444' }]}>
+            View Profile
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderConnection = ({ item: connection }: { item: Connection }) => (
+    <View style={styles.connectionCard}>
+      <View style={styles.userHeader}>
+        <View style={styles.userAvatar}>
+          <Text style={styles.userAvatarText}>
+            {connection.user.name.charAt(0).toUpperCase()}
+          </Text>
+          {connection.user.isActive && <View style={styles.activeIndicator} />}
+        </View>
+        <View style={styles.userInfo}>
+          <Text style={styles.userName}>{connection.user.name}</Text>
+          <View style={styles.userRoleRow}>
+            {renderRoleIcon(connection.user.selectedRole)}
+            <Text style={styles.userRole}>{connection.user.selectedRole}</Text>
+          </View>
+          {connection.lastMessage && (
+            <Text style={styles.lastMessage} numberOfLines={1}>
+              {connection.lastMessage.message}
+            </Text>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.connectionActions}>
+        {connection.status === 'pending' ? (
+          <View style={styles.pendingActions}>
+            <TouchableOpacity 
+              style={[styles.actionBtn, styles.acceptBtn]}
+              onPress={() => acceptConnectionRequest(connection.user._id)}
+            >
+              <CheckCircle size={16} color="#fff" />
+              <Text style={styles.actionBtnText}>Accept</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn]}>
+              <X size={16} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity 
+            style={[styles.actionBtn, styles.chatBtn]}
+            onPress={() => startChat(connection.user)}
+          >
+            <MessageCircle size={16} color="#fff" />
+            <Text style={styles.actionBtnText}>Chat</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
 
   const styles = getStyles(theme);
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Find Your Match</Text>
-          <Text style={styles.headerSubtitle}>Connect with learners and mentors</Text>
+        <Text style={styles.headerTitle}>Connect</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            style={styles.aiBtn}
+            onPress={startAIMatching}
+          >
+            <Bot size={20} color="#fff" />
+            <Text style={styles.aiBtnText}>AI Match</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.filterBtn}>
+      </View>
+
+      {/* Search and Filter */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Search size={20} color={theme === 'dark' ? '#9CA3AF' : '#6B7280'} />
+          <TextInput
+            placeholder="Search by name, skills, role..."
+            placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.searchInput}
+          />
+        </View>
+        <TouchableOpacity 
+          style={styles.filterBtn}
+          onPress={() => setFilterModalVisible(true)}
+        >
           <Filter size={20} color={theme === 'dark' ? '#F9FAFB' : '#111827'} />
         </TouchableOpacity>
       </View>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Search size={20} color={theme === 'dark' ? '#9CA3AF' : '#6B7280'} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search by skills, location, or name..."
-          placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
-
-      {/* Filter Tabs */}
-      <View style={styles.filterTabs}>
+      {/* Tabs */}
+      <View style={styles.tabContainer}>
         {[
-          { key: 'all', label: 'All Users' },
-          { key: 'available', label: 'Available' },
-          { key: 'connected', label: 'Connected' }
-        ].map(filter => (
-          <TouchableOpacity
-            key={filter.key}
-            style={[styles.filterTab, activeFilter === filter.key && styles.activeFilterTab]}
-            onPress={() => setActiveFilter(filter.key)}
-          >
-            <Text style={[styles.filterTabText, activeFilter === filter.key && styles.activeFilterTabText]}>
-              {filter.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+          { id: 'discover', label: 'Discover', icon: Users },
+          { id: 'connections', label: 'Connected', icon: CheckCircle },
+          { id: 'requests', label: 'Requests', icon: Clock }
+        ].map((tab) => {
+          const IconComponent = tab.icon;
+          return (
+            <TouchableOpacity
+              key={tab.id}
+              style={[styles.tab, activeTab === tab.id && styles.activeTab]}
+              onPress={() => setActiveTab(tab.id as any)}
+            >
+              <IconComponent 
+                size={16} 
+                color={activeTab === tab.id 
+                  ? '#fff' 
+                  : (theme === 'dark' ? '#9CA3AF' : '#6B7280')
+                } 
+              />
+              <Text style={[
+                styles.tabText,
+                activeTab === tab.id && styles.activeTabText
+              ]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      {/* AI Match Button */}
-      <TouchableOpacity 
-        style={styles.aiMatchBtn}
-        onPress={handleAIMatch}
-      >
-        <Zap size={20} color="#fff" />
-        <Text style={styles.aiMatchText}>AI Smart Match</Text>
-        <View style={styles.aiMatchBadge}>
-          <Text style={styles.aiMatchBadgeText}>NEW</Text>
-        </View>
-      </TouchableOpacity>
-
-      {/* Stats Overview */}
-      <View style={styles.statsOverview}>
-        <View style={styles.statItem}>
-          <Users size={16} color={theme === 'dark' ? '#8B5CF6' : '#EF4444'} />
-          <Text style={styles.statText}>{filteredUsers.length} Users Found</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Target size={16} color={theme === 'dark' ? '#10B981' : '#F59E0B'} />
-          <Text style={styles.statText}>
-            {Math.round(filteredUsers.reduce((acc, user) => acc + user.matchScore, 0) / filteredUsers.length)}% Avg Match
-          </Text>
-        </View>
-      </View>
-
-      {/* User Cards */}
-      {filteredUsers.map(user => (
-        <View key={user.id} style={styles.userCard}>
-          <View style={styles.userCardHeader}>
-            <View style={styles.avatarContainer}>
-              <Image source={{ uri: user.avatar }} style={styles.userCardAvatar} />
-              <View style={[styles.statusIndicator, user.lastActive.includes('minutes') && styles.onlineStatus]} />
+      {/* Content */}
+      {activeTab === 'discover' ? (
+        <FlatList
+          data={users}
+          renderItem={renderUser}
+          keyExtractor={(item) => item._id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+          refreshing={loading}
+          onRefresh={() => {
+            setLoading(true);
+            fetchUsers();
+            fetchConnections();
+          }}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Users size={48} color={theme === 'dark' ? '#4B5563' : '#9CA3AF'} />
+              <Text style={styles.emptyStateText}>No users found</Text>
+              <Text style={styles.emptyStateSubtext}>Try adjusting your search or filters</Text>
             </View>
-            <View style={styles.userCardInfo}>
-              <View style={styles.userNameRow}>
-                <Text style={styles.userCardName}>{user.name}</Text>
-                <View style={styles.matchScore}>
-                  <Text style={styles.matchScoreText}>{user.matchScore}%</Text>
-                </View>
-              </View>
-              <Text style={styles.userExpertise}>{user.expertise}</Text>
-              <View style={styles.locationRow}>
-                <MapPin size={12} color={theme === 'dark' ? '#9CA3AF' : '#6B7280'} />
-                <Text style={styles.locationText}>{user.location}</Text>
-              </View>
-              <View style={styles.metaRow}>
-                <View style={styles.metaItem}>
-                  <Star size={12} color="#F59E0B" />
-                  <Text style={styles.metaText}>{user.rating}</Text>
-                </View>
-                <View style={styles.metaItem}>
-                  <Users size={12} color={theme === 'dark' ? '#9CA3AF' : '#6B7280'} />
-                  <Text style={styles.metaText}>{user.connections}</Text>
-                </View>
-                <View style={styles.metaItem}>
-                  <BookOpen size={12} color={theme === 'dark' ? '#9CA3AF' : '#6B7280'} />
-                  <Text style={styles.metaText}>{user.projects} projects</Text>
-                </View>
-                <View style={styles.metaItem}>
-                  <Clock size={12} color={theme === 'dark' ? '#9CA3AF' : '#6B7280'} />
-                  <Text style={styles.metaText}>{user.lastActive}</Text>
-                </View>
-              </View>
+          }
+        />
+      ) : (
+        <FlatList
+          data={connections.filter(c => 
+            activeTab === 'connections' ? c.status === 'connected' : c.status === 'pending'
+          )}
+          renderItem={renderConnection}
+          keyExtractor={(item) => item._id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+          refreshing={loading}
+          onRefresh={() => {
+            setLoading(true);
+            fetchUsers();
+            fetchConnections();
+          }}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Users size={48} color={theme === 'dark' ? '#4B5563' : '#9CA3AF'} />
+              <Text style={styles.emptyStateText}>
+                {activeTab === 'connections' ? 'No connections yet' : 'No pending requests'}
+              </Text>
+              <Text style={styles.emptyStateSubtext}>
+                {activeTab === 'connections' ? 'Start connecting with people to grow your network' : 
+                 'No pending connection requests'}
+              </Text>
             </View>
-          </View>
-
-          <View style={styles.skillsSection}>
-            <View style={styles.skillCategory}>
-              <View style={styles.skillCategoryHeader}>
-                <CheckCircle size={14} color={theme === 'dark' ? '#10B981' : '#059669'} />
-                <Text style={styles.skillCategoryTitle}>Knows ({user.knows.length})</Text>
-              </View>
-              <View style={styles.skillTags}>
-                {user.knows.slice(0, 3).map((skill, index) => (
-                  <View key={index} style={[styles.skillTag, styles.knowsTag]}>
-                    <Text style={styles.knowsTagText}>{skill}</Text>
-                  </View>
-                ))}
-                {user.knows.length > 3 && (
-                  <View style={styles.moreSkillsTag}>
-                    <Text style={styles.moreSkillsText}>+{user.knows.length - 3}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.skillCategory}>
-              <View style={styles.skillCategoryHeader}>
-                <Target size={14} color={theme === 'dark' ? '#F59E0B' : '#D97706'} />
-                <Text style={styles.skillCategoryTitle}>Wants to Learn ({user.wants.length})</Text>
-              </View>
-              <View style={styles.skillTags}>
-                {user.wants.slice(0, 3).map((skill, index) => (
-                  <View key={index} style={[styles.skillTag, styles.wantsTag]}>
-                    <Text style={styles.wantsTagText}>{skill}</Text>
-                  </View>
-                ))}
-                {user.wants.length > 3 && (
-                  <View style={styles.moreSkillsTag}>
-                    <Text style={styles.moreSkillsText}>+{user.wants.length - 3}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.skillCategory}>
-              <View style={styles.skillCategoryHeader}>
-                <Award size={14} color={theme === 'dark' ? '#8B5CF6' : '#7C3AED'} />
-                <Text style={styles.skillCategoryTitle}>Teaches ({user.teaches.length})</Text>
-              </View>
-              <View style={styles.skillTags}>
-                {user.teaches.slice(0, 3).map((skill, index) => (
-                  <View key={index} style={[styles.skillTag, styles.teachesTag]}>
-                    <Text style={styles.teachesTagText}>{skill}</Text>
-                  </View>
-                ))}
-                {user.teaches.length > 3 && (
-                  <View style={styles.moreSkillsTag}>
-                    <Text style={styles.moreSkillsText}>+{user.teaches.length - 3}</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.userCardActions}>
-            <TouchableOpacity 
-              style={[styles.connectBtn, user.isConnected && styles.connectedBtn]}
-              onPress={() => handleConnect(user.id)}
-            >
-              {user.isConnected ? (
-                <>
-                  <CheckCircle size={16} color="#fff" />
-                  <Text style={styles.connectBtnText}>Connected</Text>
-                </>
-              ) : (
-                <>
-                  <Users size={16} color="#fff" />
-                  <Text style={styles.connectBtnText}>Connect</Text>
-                </>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.messageBtn}
-              onPress={() => handleMessage(user.name)}
-            >
-              <Send size={16} color={theme === 'dark' ? '#8B5CF6' : '#EF4444'} />
-              <Text style={styles.messageBtnText}>Message</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      ))}
-
-      {/* Load More */}
-      {filteredUsers.length === 0 && (
-        <View style={styles.emptyState}>
-          <Search size={48} color={theme === 'dark' ? '#4B5563' : '#9CA3AF'} />
-          <Text style={styles.emptyStateTitle}>No matches found</Text>
-          <Text style={styles.emptyStateText}>Try adjusting your search criteria or filters</Text>
-        </View>
+          }
+        />
       )}
-    </ScrollView>
+
+      {/* Filter Modal */}
+      <Modal visible={filterModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.filterModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filter Users</Text>
+              <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
+                <X size={24} color={theme === 'dark' ? '#F9FAFB' : '#111827'} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.filterLabel}>Role</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+                {['all', 'Frontend Developer', 'Backend Developer', 'Full Stack Developer', 'Mobile Developer', 'Data Scientist', 'DevOps Engineer', 'UI/UX Designer', 'Student'].map((role) => (
+                  <TouchableOpacity
+                    key={role}
+                    style={[
+                      styles.filterChip,
+                      filters.role === role && styles.filterChipSelected
+                    ]}
+                    onPress={() => setFilters({...filters, role})}
+                  >
+                    {role !== 'all' && (
+                      <View style={styles.filterChipIcon}>
+                        {renderRoleIcon(role)}
+                      </View>
+                    )}
+                    <Text style={[
+                      styles.filterChipText,
+                      filters.role === role && styles.filterChipTextSelected
+                    ]}>
+                      {role === 'all' ? 'All Roles' : role}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <Text style={styles.filterLabel}>Experience Level</Text>
+              <View style={styles.filterRow}>
+                {['all', 'beginner', 'intermediate', 'advanced', 'expert'].map((level) => (
+                  <TouchableOpacity
+                    key={level}
+                    style={[
+                      styles.filterOption,
+                      filters.experienceLevel === level && styles.filterOptionSelected
+                    ]}
+                    onPress={() => setFilters({...filters, experienceLevel: level})}
+                  >
+                    <Text style={[
+                      styles.filterOptionText,
+                      filters.experienceLevel === level && styles.filterOptionTextSelected
+                    ]}>
+                      {level === 'all' ? 'All' : level}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.filterLabel}>Skills</Text>
+              <TextInput
+                placeholder="e.g., React, Python, Node.js"
+                placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
+                value={filters.skills}
+                onChangeText={(text) => setFilters({...filters, skills: text})}
+                style={styles.filterInput}
+              />
+
+              <Text style={styles.filterLabel}>Location</Text>
+              <TextInput
+                placeholder="e.g., San Francisco, Remote"
+                placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
+                value={filters.location}
+                onChangeText={(text) => setFilters({...filters, location: text})}
+                style={styles.filterInput}
+              />
+            </ScrollView>
+
+            <View style={styles.filterActions}>
+              <TouchableOpacity 
+                onPress={() => {
+                  setFilters({ role: 'all', experienceLevel: 'all', skills: '', location: '' });
+                  setFilterModalVisible(false);
+                }} 
+                style={styles.resetBtn}
+              >
+                <Text style={styles.resetText}>Reset</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={() => setFilterModalVisible(false)} 
+                style={styles.applyBtn}
+              >
+                <Text style={styles.applyText}>Apply Filters</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* AI Matching Modal */}
+      <Modal visible={aiMatchingVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.aiModal}>
+            {matchingProgress < 100 ? (
+              <View style={styles.loadingContainer}>
+                <Bot size={48} color={theme === 'dark' ? '#8B5CF6' : '#EF4444'} />
+                <Text style={styles.loadingTitle}>AI is finding your perfect matches...</Text>
+                <View style={styles.progressBar}>
+                  <View style={[styles.progressFill, { width: `${matchingProgress}%` }]} />
+                </View>
+                <Text style={styles.progressText}>{matchingProgress}%</Text>
+              </View>
+            ) : (
+              <View style={styles.matchResults}>
+                <Text style={styles.matchTitle}>Perfect Matches Found! 🎯</Text>
+                <FlatList
+                  data={aiMatches}
+                  renderItem={renderUser}
+                  keyExtractor={(item) => item._id}
+                  showsVerticalScrollIndicator={false}
+                  style={styles.matchesList}
+                />
+                <TouchableOpacity 
+                  onPress={() => setAiMatchingVisible(false)} 
+                  style={styles.closeBtn}
+                >
+                  <Text style={styles.closeBtnText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Chat Modal */}
+      <Modal visible={chatModalVisible} transparent animationType="slide">
+        <View style={styles.chatModalOverlay}>
+          <View style={styles.chatModal}>
+            <View style={styles.chatHeader}>
+              <View style={styles.chatUserInfo}>
+                <View style={styles.chatAvatar}>
+                  <Text style={styles.chatAvatarText}>
+                    {selectedUser?.name.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <View>
+                  <Text style={styles.chatUserName}>{selectedUser?.name}</Text>
+                  <Text style={styles.chatUserStatus}>
+                    {selectedUser?.isActive ? 'Online' : 'Offline'}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setChatModalVisible(false)}>
+                <X size={24} color={theme === 'dark' ? '#F9FAFB' : '#111827'} />
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={chatMessages}
+              keyExtractor={(item) => item._id}
+              style={styles.chatMessages}
+              renderItem={({ item: message }) => (
+                <View style={[
+                  styles.messageContainer,
+                  message.sender === selectedUser?._id ? styles.receivedMessage : styles.sentMessage
+                ]}>
+                  <Text style={[
+                    styles.messageText,
+                    message.sender === selectedUser?._id ? styles.receivedMessageText : styles.sentMessageText
+                  ]}>
+                    {message.message}
+                  </Text>
+                  <Text style={styles.messageTime}>
+                    {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </View>
+              )}
+              inverted
+            />
+
+            <View style={styles.chatInput}>
+              <TextInput
+                placeholder="Type a message..."
+                placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
+                value={newMessage}
+                onChangeText={setNewMessage}
+                style={styles.messageInput}
+                multiline
+                maxLength={500}
+              />
+              <TouchableOpacity onPress={sendMessage} style={styles.sendBtn}>
+                <Send size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 };
 
@@ -379,336 +826,566 @@ const getStyles = (theme: 'dark' | 'light') => StyleSheet.create({
     fontWeight: '700',
     color: theme === 'dark' ? '#F9FAFB' : '#111827',
   },
-  headerSubtitle: {
-    fontSize: 14,
-    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
-    marginTop: 2,
+  headerActions: {
+    flexDirection: 'row',
+    gap: 12,
   },
-  filterBtn: {
-    padding: 8,
-    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+  aiBtn: {
+    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    gap: 6,
+  },
+  aiBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   searchContainer: {
     flexDirection: 'row',
+    paddingHorizontal: 20,
+    marginBottom: 20,
+    gap: 12,
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
-    marginHorizontal: 20,
-    marginBottom: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: theme === 'dark' ? 0.3 : 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    paddingHorizontal: 16,
+    gap: 12,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 12,
-    fontSize: 16,
     color: theme === 'dark' ? '#F9FAFB' : '#111827',
+    fontSize: 16,
+    paddingVertical: 12,
   },
-  filterTabs: {
+  filterBtn: {
+    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
+    padding: 12,
+    borderRadius: 12,
+  },
+  tabContainer: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    marginBottom: 16,
+    marginBottom: 20,
     gap: 8,
   },
-  filterTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
-    borderWidth: 1,
-    borderColor: theme === 'dark' ? '#374151' : '#E5E7EB',
-  },
-  activeFilterTab: {
-    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
-    borderColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
-  },
-  filterTabText: {
-    fontSize: 12,
-    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
-    fontWeight: '500',
-  },
-  activeFilterTabText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  aiMatchBtn: {
-    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+  tab: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 20,
-    marginBottom: 20,
-    paddingVertical: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 12,
-    gap: 8,
-    position: 'relative',
-    shadowColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  aiMatchText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  aiMatchBadge: {
-    position: 'absolute',
-    top: -8,
-    right: 20,
-    backgroundColor: '#10B981',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  aiMatchBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 8,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  statsOverview: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 20,
-    gap: 16,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
     gap: 6,
   },
-  statText: {
-    fontSize: 14,
-    color: theme === 'dark' ? '#D1D5DB' : '#4B5563',
+  activeTab: {
+    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+  },
+  tabText: {
+    fontSize: 12,
     fontWeight: '500',
+    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
+  },
+  activeTabText: {
+    color: '#fff',
+  },
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 100,
   },
   userCard: {
     backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
-    marginHorizontal: 20,
-    marginBottom: 16,
     borderRadius: 16,
-    padding: 20,
+    padding: 16,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: theme === 'dark' ? 0.3 : 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme === 'dark' ? 0.1 : 0.05,
     shadowRadius: 8,
     elevation: 4,
   },
-  userCardHeader: {
-    flexDirection: 'row',
+  connectionCard: {
+    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme === 'dark' ? 0.1 : 0.05,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  avatarContainer: {
+  userHeader: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  userAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
     position: 'relative',
-    marginRight: 16,
   },
-  userCardAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  userAvatarText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
   },
-  statusIndicator: {
+  activeIndicator: {
     position: 'absolute',
     bottom: 2,
     right: 2,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: theme === 'dark' ? '#6B7280' : '#9CA3AF',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#10B981',
     borderWidth: 2,
     borderColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
   },
-  onlineStatus: {
-    backgroundColor: '#10B981',
-  },
-  userCardInfo: {
+  userInfo: {
     flex: 1,
   },
   userNameRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 4,
   },
-  userCardName: {
-    fontSize: 18,
-    fontWeight: '700',
+  userName: {
+    fontSize: 16,
+    fontWeight: '600',
     color: theme === 'dark' ? '#F9FAFB' : '#111827',
+    flex: 1,
   },
-  userExpertise: {
-    fontSize: 14,
-    color: theme === 'dark' ? '#8B5CF6' : '#EF4444',
-    fontWeight: '500',
-    marginBottom: 6,
-  },
-  matchScore: {
-    backgroundColor: theme === 'dark' ? '#10B981' : '#059669',
+  matchBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme === 'dark' ? '#F59E0B20' : '#FEF3C7',
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 12,
+    borderRadius: 6,
+    gap: 4,
   },
-  matchScoreText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
+  matchScore: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#F59E0B',
+  },
+  userRoleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 6,
+  },
+  userRole: {
+    fontSize: 13,
+    color: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+    fontWeight: '500',
+  },
+  userExperience: {
+    fontSize: 12,
+    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
+    marginBottom: 4,
+    textTransform: 'capitalize',
   },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
     gap: 4,
   },
-  locationText: {
+  userLocation: {
+    fontSize: 11,
+    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
+  },
+  userBio: {
     fontSize: 13,
-    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
-  },
-  metaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  metaText: {
-    fontSize: 12,
-    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
-  },
-  skillsSection: {
-    marginBottom: 20,
-  },
-  skillCategory: {
+    color: theme === 'dark' ? '#D1D5DB' : '#4B5563',
+    lineHeight: 18,
     marginBottom: 12,
   },
-  skillCategoryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 6,
-  },
-  skillCategoryTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  skillTags: {
+  skillsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
+    marginBottom: 16,
   },
-  skillTag: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  knowsTag: {
-    backgroundColor: theme === 'dark' ? '#065F46' : '#D1FAE5',
-  },
-  knowsTagText: {
-    fontSize: 11,
-    color: theme === 'dark' ? '#10B981' : '#065F46',
-    fontWeight: '500',
-  },
-  wantsTag: {
-    backgroundColor: theme === 'dark' ? '#7C2D12' : '#FED7AA',
-  },
-  wantsTagText: {
-    fontSize: 11,
-    color: theme === 'dark' ? '#F59E0B' : '#9A3412',
-    fontWeight: '500',
-  },
-  teachesTag: {
-    backgroundColor: theme === 'dark' ? '#312E81' : '#E0E7FF',
-  },
-  teachesTagText: {
-    fontSize: 11,
-    color: theme === 'dark' ? '#8B5CF6' : '#3730A3',
-    fontWeight: '500',
-  },
-  moreSkillsTag: {
+  skillChip: {
     backgroundColor: theme === 'dark' ? '#374151' : '#F3F4F6',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 6,
   },
-  moreSkillsText: {
+  skillText: {
+    fontSize: 11,
+    color: theme === 'dark' ? '#D1D5DB' : '#4B5563',
+    fontWeight: '500',
+  },
+  moreSkills: {
     fontSize: 11,
     color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
-    fontWeight: '500',
+    fontStyle: 'italic',
   },
-  userCardActions: {
+  userActions: {
     flexDirection: 'row',
-    gap: 12,
-  },
-  connectBtn: {
-    flex: 1,
-    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 12,
     gap: 8,
   },
-  connectedBtn: {
-    backgroundColor: theme === 'dark' ? '#10B981' : '#059669',
+  connectionActions: {
+    alignItems: 'flex-end',
   },
-  connectBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+  pendingActions: {
+    flexDirection: 'row',
+    gap: 8,
   },
-  messageBtn: {
-    flex: 1,
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 4,
+  },
+  connectBtn: {
+    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+  },
+  chatBtn: {
+    backgroundColor: '#10B981',
+  },
+  acceptBtn: {
+    backgroundColor: '#10B981',
+  },
+  rejectBtn: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 8,
+  },
+  pendingBtn: {
+    backgroundColor: theme === 'dark' ? '#F59E0B20' : '#FEF3C7',
+  },
+  viewBtn: {
     backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
   },
-  messageBtnText: {
-    color: theme === 'dark' ? '#8B5CF6' : '#EF4444',
-    fontSize: 14,
-    fontWeight: '600',
+  actionBtnText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#fff',
+  },
+  lastMessage: {
+    fontSize: 12,
+    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   emptyState: {
     alignItems: 'center',
     paddingVertical: 60,
-    paddingHorizontal: 40,
   },
-  emptyStateTitle: {
+  emptyStateText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: theme === 'dark' ? '#6B7280' : '#9CA3AF',
+    textAlign: 'center',
+    maxWidth: 200,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end',
+  },
+  filterModal: {
+    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    maxHeight: '80%',
+  },
+  aiModal: {
+    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    margin: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: theme === 'dark' ? '#F9FAFB' : '#111827',
+  },
+  filterLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: theme === 'dark' ? '#F9FAFB' : '#111827',
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  filterScroll: {
+    marginBottom: 8,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme === 'dark' ? '#374151' : '#F3F4F6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginRight: 8,
+    gap: 6,
+  },
+  filterChipSelected: {
+    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+  },
+  filterChipIcon: {
+    marginRight: 2,
+  },
+  filterChipText: {
+    fontSize: 12,
+    color: theme === 'dark' ? '#D1D5DB' : '#4B5563',
+    fontWeight: '500',
+  },
+  filterChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  filterOption: {
+    backgroundColor: theme === 'dark' ? '#374151' : '#F3F4F6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  filterOptionSelected: {
+    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+  },
+  filterOptionText: {
+    fontSize: 12,
+    color: theme === 'dark' ? '#D1D5DB' : '#4B5563',
+    fontWeight: '500',
+    textTransform: 'capitalize',
+  },
+  filterOptionTextSelected: {
+    color: '#FFFFFF',
+  },
+  filterInput: {
+    backgroundColor: theme === 'dark' ? '#374151' : '#F3F4F6',
+    color: theme === 'dark' ? '#F9FAFB' : '#111827',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    fontSize: 14,
+  },
+  filterActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+  },
+  resetBtn: {
+    flex: 1,
+    backgroundColor: theme === 'dark' ? '#4B5563' : '#E5E7EB',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  resetText: {
+    color: theme === 'dark' ? '#D1D5DB' : '#374151',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  applyBtn: {
+    flex: 1,
+    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  applyText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme === 'dark' ? '#F9FAFB' : '#111827',
+    textAlign: 'center',
+    marginVertical: 20,
+  },
+  progressBar: {
+    width: '100%',
+    height: 8,
+    backgroundColor: theme === 'dark' ? '#374151' : '#E5E7EB',
+    borderRadius: 4,
+    marginBottom: 12,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
+  },
+  matchResults: {
+    maxHeight: '100%',
+  },
+  matchTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: theme === 'dark' ? '#F9FAFB' : '#111827',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
     textAlign: 'center',
-    lineHeight: 20,
+    marginBottom: 20,
+  },
+  matchesList: {
+    maxHeight: 400,
+  },
+  closeBtn: {
+    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  closeBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  chatModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+  chatModal: {
+    flex: 1,
+    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
+    marginTop: 60,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  chatHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: theme === 'dark' ? '#374151' : '#E5E7EB',
+  },
+  chatUserInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  chatAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  chatAvatarText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  chatUserName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme === 'dark' ? '#F9FAFB' : '#111827',
+  },
+  chatUserStatus: {
+    fontSize: 12,
+    color: theme === 'dark' ? '#10B981' : '#059669',
+  },
+  chatMessages: {
+    flex: 1,
+    padding: 20,
+  },
+  messageContainer: {
+    marginVertical: 4,
+    maxWidth: '80%',
+  },
+  receivedMessage: {
+    alignSelf: 'flex-start',
+  },
+  sentMessage: {
+    alignSelf: 'flex-end',
+  },
+  messageText: {
+    padding: 12,
+    borderRadius: 12,
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  receivedMessageText: {
+    backgroundColor: theme === 'dark' ? '#374151' : '#F3F4F6',
+    color: theme === 'dark' ? '#F9FAFB' : '#111827',
+    borderBottomLeftRadius: 4,
+  },
+  sentMessageText: {
+    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+    color: '#fff',
+    borderBottomRightRadius: 4,
+  },
+  messageTime: {
+    fontSize: 10,
+    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  chatInput: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: theme === 'dark' ? '#374151' : '#E5E7EB',
+    gap: 12,
+  },
+  messageInput: {
+    flex: 1,
+    backgroundColor: theme === 'dark' ? '#374151' : '#F3F4F6',
+    color: theme === 'dark' ? '#F9FAFB' : '#111827',
+    borderRadius: 12,
+    padding: 12,
+    maxHeight: 100,
+    fontSize: 14,
+  },
+  sendBtn: {
+    backgroundColor: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+    padding: 12,
+    borderRadius: 12,
   },
 });
 

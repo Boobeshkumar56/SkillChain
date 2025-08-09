@@ -1,11 +1,27 @@
-import { AlertCircle, Award, Calendar, CheckCircle, Github, Globe, MapPin, Pencil, Plus, Trash2 } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { Animated, Image, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
+import { AlertCircle, Award, Calendar, CheckCircle, Github, Globe, LogOut, Moon, Pencil, Plus, Sun, Trash2 } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Animated, Image, Linking, Modal, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
 
 const defaultAvatar = 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y';
+const API_URL = process.env.API_URL || "http://localhost:5000/api/auth";
+
+interface ProfileProps {
+  theme?: 'dark' | 'light';
+  showToast: (message: string, type?: 'success' | 'error') => void;
+  toggleTheme: () => void;
+  onLogout?: () => void;
+}
 
 // Custom Toast Component for Cross-Platform Support
-const CustomToast = ({ visible, message, type = 'success', theme, onHide }) => {
+const CustomToast: React.FC<{
+  visible: boolean;
+  message: string;
+  type?: 'success' | 'error';
+  theme: 'dark' | 'light';
+  onHide: () => void;
+}> = ({ visible, message, type = 'success', theme, onHide }) => {
   const [fadeAnim] = useState(new Animated.Value(0));
 
   React.useEffect(() => {
@@ -34,7 +50,10 @@ const CustomToast = ({ visible, message, type = 'success', theme, onHide }) => {
   );
 };
 
-export default function Profile({ theme = 'dark', showToast }) {
+export default function Profile({ theme = 'dark', showToast, toggleTheme }: ProfileProps) {
+  const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [bio, setBio] = useState('Passionate developer crafting digital experiences with cutting-edge technologies');
   const [editingBio, setEditingBio] = useState(false);
   const [skills, setSkills] = useState(['React Native', 'Firebase', 'Node.js', 'TypeScript']);
@@ -53,9 +72,83 @@ export default function Profile({ theme = 'dark', showToast }) {
   const [newProject, setNewProject] = useState({ title: '', description: '', github: '', live: '' });
   
   // Toast state
-  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+  const [toast, setToast] = useState<{
+    visible: boolean;
+    message: string;
+    type: 'success' | 'error';
+  }>({ visible: false, message: '', type: 'success' });
 
-  const handleShowToast = (message, type = 'success') => {
+  // Fetch user data on component mount
+  useEffect(() => {
+    fetchUserData();
+  }, []);
+
+  const fetchUserData = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        router.replace('/Auth');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/profile`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+        
+        // Update local state with fetched data
+        if (userData.bio) setBio(userData.bio);
+        if (userData.knownSkills) {
+          const skillNames = userData.knownSkills.map((skill: any) => skill.skill);
+          setSkills(skillNames);
+        }
+        if (userData.projects) setProjects(userData.projects);
+      } else {
+        handleShowToast('Failed to fetch user data', 'error');
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      handleShowToast('Error loading profile', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await AsyncStorage.multiRemove(['token', 'user']);
+              handleShowToast('Logged out successfully');
+              router.replace('/Auth');
+            } catch (error) {
+              console.error('Error during logout:', error);
+              handleShowToast('Error during logout', 'error');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleShowToast = (message: string, type: 'success' | 'error' = 'success') => {
     if (showToast) {
       showToast(message, type);
     } else if (Platform.OS === 'android') {
@@ -80,7 +173,7 @@ export default function Profile({ theme = 'dark', showToast }) {
     handleShowToast('Skill added successfully!');
   };
 
-  const removeSkill = (skillToRemove) => {
+  const removeSkill = (skillToRemove: string) => {
     setSkills(skills.filter(skill => skill !== skillToRemove));
     handleShowToast('Skill removed');
   };
@@ -96,41 +189,85 @@ export default function Profile({ theme = 'dark', showToast }) {
     handleShowToast('Project added successfully!');
   };
 
+  const updateBio = async (newBio: string) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/update-profile`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ bio: newBio }),
+      });
+
+      if (response.ok) {
+        setBio(newBio);
+        handleShowToast('Bio updated successfully!');
+      } else {
+        handleShowToast('Failed to update bio', 'error');
+      }
+    } catch (error) {
+      console.error('Error updating bio:', error);
+      handleShowToast('Error updating bio', 'error');
+    }
+  };
+
   const styles = getStyles(theme);
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={styles.container}>
+      {/* Theme Toggle Button */}
+      <TouchableOpacity 
+        style={styles.themeToggle}
+        onPress={toggleTheme}
+      >
+        {theme === 'dark' ? 
+          <Sun size={20} color="#F59E0B" /> : 
+          <Moon size={20} color="#8B5CF6" />
+        }
+      </TouchableOpacity>
+
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      ) : (
+        <>
       {/* Hero Profile Section */}
       <View style={styles.heroSection}>
         <View style={styles.avatarContainer}>
           <Image source={{ uri: defaultAvatar }} style={styles.avatar} />
           <View style={styles.statusDot} />
         </View>
-        <Text style={styles.name}>Boobesh Kumar</Text>
-        <Text style={styles.title}>Full Stack Developer</Text>
+        <Text style={styles.name}>{user?.name || 'Loading...'}</Text>
+        <Text style={styles.title}>{user?.selectedRole || user?.customRole || 'Developer'}</Text>
         <View style={styles.locationRow}>
-          <MapPin size={14} color={theme === 'dark' ? '#8B5CF6' : '#EF4444'} />
-          <Text style={styles.location}>San Francisco, CA</Text>
-          <Calendar size={14} color={theme === 'dark' ? '#8B5CF6' : '#EF4444'} style={{marginLeft: 16}} />
-          <Text style={styles.joinDate}>Joined 2023</Text>
+          <Calendar size={14} color={theme === 'dark' ? '#8B5CF6' : '#EF4444'} />
+          <Text style={styles.joinDate}>
+            Joined {user?.createdAt ? new Date(user.createdAt).getFullYear() : '2023'}
+          </Text>
         </View>
       </View>
 
       {/* Stats Row */}
       <View style={styles.statsContainer}>
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>24</Text>
+          <Text style={styles.statNumber}>{projects?.length || 0}</Text>
           <Text style={styles.statLabel}>Projects</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>1.2k</Text>
-          <Text style={styles.statLabel}>Followers</Text>
+          <Text style={styles.statNumber}>{skills?.length || 0}</Text>
+          <Text style={styles.statLabel}>Skills</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>856</Text>
-          <Text style={styles.statLabel}>Following</Text>
+          <Text style={styles.statNumber}>{user?.experienceLevel || 'N/A'}</Text>
+          <Text style={styles.statLabel}>Experience</Text>
         </View>
       </View>
 
@@ -148,7 +285,12 @@ export default function Profile({ theme = 'dark', showToast }) {
             onChangeText={setBio}
             maxLength={200}
             style={styles.bioInput}
-            onBlur={() => setEditingBio(false)}
+            onBlur={() => {
+              setEditingBio(false);
+              if (bio !== user?.bio) {
+                updateBio(bio);
+              }
+            }}
             multiline
             placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
           />
@@ -204,6 +346,14 @@ export default function Profile({ theme = 'dark', showToast }) {
             </View>
           </View>
         ))}
+      </View>
+
+      {/* Logout Section */}
+      <View style={styles.card}>
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
+          <LogOut size={20} color="#fff" />
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Modals */}
@@ -283,14 +433,47 @@ export default function Profile({ theme = 'dark', showToast }) {
         theme={theme}
         onHide={() => setToast({ ...toast, visible: false })} 
       />
-    </ScrollView>
+      </>
+      )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-const getStyles = (theme) => StyleSheet.create({
+const getStyles = (theme: 'dark' | 'light') => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme === 'dark' ? '#0F0F23' : '#F8FAFC',
+  },
+  themeToggle: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1000,
+    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
+    padding: 12,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 100, // Add padding to prevent content from being hidden behind bottom navigation
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 100,
+  },
+  loadingText: {
+    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
+    fontSize: 16,
   },
   heroSection: {
     alignItems: 'center',
@@ -334,11 +517,7 @@ const getStyles = (theme) => StyleSheet.create({
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  location: {
-    color: theme === 'dark' ? '#E5E7EB' : '#6B7280',
-    fontSize: 14,
-    marginLeft: 4,
+    justifyContent: 'center',
   },
   joinDate: {
     color: theme === 'dark' ? '#E5E7EB' : '#6B7280',
@@ -364,7 +543,7 @@ const getStyles = (theme) => StyleSheet.create({
     alignItems: 'center',
   },
   statNumber: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     color: theme === 'dark' ? '#8B5CF6' : '#EF4444',
     marginBottom: 4,
@@ -542,6 +721,21 @@ const getStyles = (theme) => StyleSheet.create({
     alignItems: 'center',
   },
   saveText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  logoutBtn: {
+    flexDirection: 'row',
+    backgroundColor: '#EF4444',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  logoutText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',

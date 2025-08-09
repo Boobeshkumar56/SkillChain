@@ -1,372 +1,305 @@
-import {
-    AlertCircle,
-    CheckCircle,
-    Home,
-    MessageSquare,
-    Moon,
-    Search,
-    Sun,
-    User
-} from 'lucide-react-native';
-import React, { useState } from 'react';
-import { Animated, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-
-// Import the separate components
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useCallback, useEffect, useState } from 'react';
+import { AppState, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { TabBar, Toast } from '../components';
+import Auth from './Auth';
 import Connect from './connect';
 import Dashboard from './Dashboard';
-import { Feed } from './Feed';
+import Feed from './Feed';
+import OnboardingScreen from './onboarding';
 import Profile from './Profile';
 
-// Custom Toast Component for Cross-Platform Support
-const CustomToast: React.FC<{
+type Theme = 'dark' | 'light';
+
+interface ToastState {
   visible: boolean;
   message: string;
-  type?: 'success' | 'error';
-  theme: 'dark' | 'light';
-  onHide: () => void;
-}> = ({ visible, message, type = 'success', onHide, theme }) => {
-  const [fadeAnim] = useState(new Animated.Value(0));
+  type: 'success' | 'error';
+}
 
-  React.useEffect(() => {
-    if (visible) {
-      Animated.sequence([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.delay(2000),
-        Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true })
-      ]).start(() => onHide());
-    }
-  }, [visible, fadeAnim, onHide]);
+const API_URL = process.env.API_URL || "http://localhost:5000/api/auth";
 
-  if (!visible) return null;
+const Main: React.FC = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [needsOnboarding, setNeedsOnboarding] = useState<boolean>(false);
+  const [currentScreen, setCurrentScreen] = useState<'dashboard' | 'feed' | 'connect' | 'profile'>('dashboard');
+  const [theme, setTheme] = useState<Theme>('dark');
+    const [toast, setToast] = useState<{message: string, type: 'success' | 'error' | 'info', visible: boolean}>({
+    message: '',
+    type: 'info',
+    visible: false,
+  });
 
-  return (
-    <Animated.View style={[styles.toast, { 
-      opacity: fadeAnim,
-      backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
-      borderLeftColor: type === 'success' ? (theme === 'dark' ? '#10B981' : '#EF4444') : '#EF4444'
-    }]}>
-      {type === 'success' ? 
-        <CheckCircle size={16} color={theme === 'dark' ? '#10B981' : '#EF4444'} /> : 
-        <AlertCircle size={16} color="#EF4444" />
+  useEffect(() => {
+    initializeApp();
+    
+    // Handle app state changes
+    const handleAppStateChange = (nextAppState: string) => {
+      if (nextAppState === 'active') {
+        // Verify token when app becomes active
+        verifyAuthToken();
       }
-      <Text style={[styles.toastText, { color: theme === 'dark' ? '#F9FAFB' : '#111827' }]}>
-        {message}
-      </Text>
-    </Animated.View>
-  );
-};
+    };
 
-// Profile Placeholder Component
-const ProfilePlaceholder: React.FC<{ theme: 'dark' | 'light' }> = ({ theme }) => {
-  const styles = getStyles(theme);
-  
-  return (
-    <View style={styles.profilePlaceholder}>
-      <User size={64} color={theme === 'dark' ? '#4B5563' : '#9CA3AF'} />
-      <Text style={styles.placeholderTitle}>Profile Section</Text>
-      <Text style={styles.placeholderText}>
-        This would integrate with your existing Profile.tsx component
-      </Text>
-      <Text style={styles.placeholderSubtext}>
-        Import and replace this placeholder with your ProfilePage component
-      </Text>
-    </View>
-  );
-};
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription?.remove();
+  }, []);
 
-// Main App Component
-const MainApp: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'feed' | 'connect' | 'profile'>('dashboard');
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [toast, setToast] = useState<{
-    visible: boolean;
-    message: string;
-    type: 'success' | 'error';
-  }>({ visible: false, message: '', type: 'success' });
+  const initializeApp = async () => {
+    try {
+      // Load theme preference
+      const savedTheme = await AsyncStorage.getItem('theme');
+      if (savedTheme === 'light' || savedTheme === 'dark') {
+        setTheme(savedTheme as Theme);
+      }
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    if (Platform.OS === 'android') {
-      // Use ToastAndroid for Android if available
-      // ToastAndroid.show(message, ToastAndroid.SHORT);
-    } else {
-      setToast({ visible: true, message, type });
+      // Check authentication status
+      await verifyAuthToken();
+    } catch (error) {
+      console.error('Error initializing app:', error);
+      setIsAuthenticated(false);
     }
   };
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'dashboard':
-        return <Dashboard theme={theme} showToast={showToast} />;
-      case 'feed':
-        return <Feed theme={theme} showToast={showToast} />;
-      case 'connect':
-        return <Connect theme={theme} showToast={showToast} />;
-      case 'profile':
-        return <Profile theme={theme} />;
-      default:
-        return <Dashboard theme={theme} showToast={showToast} />;
+  const verifyAuthToken = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const user = await AsyncStorage.getItem('user');
+      
+      if (!token || !user) {
+        setIsAuthenticated(false);
+        setNeedsOnboarding(false);
+        return;
+      }
+
+      // Check if user needs onboarding
+      const userData = JSON.parse(user);
+      if (!userData.onboardingComplete) {
+        setIsAuthenticated(true);
+        setNeedsOnboarding(true);
+        return;
+      }
+
+      // Verify token with server
+      const response = await fetch(`${API_URL}/verify-token`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        setIsAuthenticated(true);
+        setNeedsOnboarding(false);
+      } else {
+        // Token is invalid, clear storage
+        await AsyncStorage.multiRemove(['token', 'user']);
+        setIsAuthenticated(false);
+        setNeedsOnboarding(false);
+      }
+    } catch (error) {
+      console.error('Error verifying token:', error);
+      // On network error, allow user to continue if token exists
+      const token = await AsyncStorage.getItem('token');
+      const user = await AsyncStorage.getItem('user');
+      if (token && user) {
+        const userData = JSON.parse(user);
+        setIsAuthenticated(true);
+        setNeedsOnboarding(!userData.onboardingComplete);
+      } else {
+        setIsAuthenticated(false);
+        setNeedsOnboarding(false);
+      }
     }
   };
 
-  const styles = getStyles(theme);
-
-  return (
-    <View style={styles.mainContainer}>
-      {/* Theme Toggle */}
-      <TouchableOpacity 
-        style={styles.themeToggle}
-        onPress={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-      >
-        {theme === 'dark' ? 
-          <Sun size={20} color="#F59E0B" /> : 
-          <Moon size={20} color="#8B5CF6" />
+  const handleLogin = async () => {
+    try {
+      const user = await AsyncStorage.getItem('user');
+      if (user) {
+        const userData = JSON.parse(user);
+        if (!userData.onboardingComplete) {
+          setNeedsOnboarding(true);
+        } else {
+          setNeedsOnboarding(false);
         }
-      </TouchableOpacity>
+      }
+      setIsAuthenticated(true);
+    } catch (error) {
+      console.error('Error handling login:', error);
+      showToast('Login error occurred', 'error');
+    }
+  };
 
-      {/* Main Content */}
-      <View style={styles.content}>
-        {renderContent()}
-      </View>
+  const handleOnboardingComplete = async () => {
+    try {
+      // Refresh user data from storage after onboarding completion
+      const user = await AsyncStorage.getItem('user');
+      if (user) {
+        const userData = JSON.parse(user);
+        if (userData.onboardingComplete) {
+          setNeedsOnboarding(false);
+          showToast('Profile setup completed!', 'success');
+        }
+      }
+    } catch (error) {
+      console.error('Error completing onboarding:', error);
+    }
+  };
 
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity
-          style={[styles.navItem, activeTab === 'dashboard' && styles.activeNavItem]}
-          onPress={() => setActiveTab('dashboard')}
-        >
-          <Home 
-            size={24} 
-            color={activeTab === 'dashboard' ? 
-              (theme === 'dark' ? '#8B5CF6' : '#EF4444') : 
-              (theme === 'dark' ? '#9CA3AF' : '#6B7280')
-            } 
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.multiRemove(['token', 'user']);
+      setIsAuthenticated(false);
+      setCurrentScreen('dashboard');
+      showToast('Logged out successfully', 'success');
+    } catch (error) {
+      console.error('Logout error:', error);
+      showToast('Logout failed', 'error');
+    }
+  };
+
+  const toggleTheme = async () => {
+    try {
+      const newTheme = theme === 'dark' ? 'light' : 'dark';
+      setTheme(newTheme);
+      await AsyncStorage.setItem('theme', newTheme);
+      showToast(`Switched to ${newTheme} mode`, 'success');
+    } catch (error) {
+      console.error('Error saving theme:', error);
+      showToast('Failed to save theme preference', 'error');
+    }
+  };
+
+    const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToast({ message, type, visible: true });
+    setTimeout(() => {
+      setToast(prev => ({ ...prev, visible: false }));
+    }, 3000);
+  }, []);
+
+  // Global error boundary effect
+  useEffect(() => {
+    const originalConsoleError = console.error;
+    console.error = (...args) => {
+      // Log errors for debugging
+      originalConsoleError(...args);
+      
+      // Show user-friendly error messages for critical errors
+      const errorMessage = args[0];
+      if (typeof errorMessage === 'string') {
+        if (errorMessage.includes('Network request failed')) {
+          showToast('Network connection error. Please check your internet.', 'error');
+        } else if (errorMessage.includes('TypeError') || errorMessage.includes('ReferenceError')) {
+          showToast('An unexpected error occurred. Please restart the app.', 'error');
+        }
+      }
+    };
+
+    return () => {
+      console.error = originalConsoleError;
+    };
+  }, []);
+
+  const renderScreen = () => {
+    const screenProps = { theme, showToast };
+    
+    try {
+      switch (currentScreen) {
+        case 'dashboard':
+          return <Dashboard {...screenProps} />;
+        case 'feed':
+          return <Feed {...screenProps} />;
+        case 'connect':
+          return <Connect {...screenProps} />;
+        case 'profile':
+          return <Profile {...screenProps} theme={theme} toggleTheme={toggleTheme} onLogout={handleLogout} />;
+        default:
+          return <Dashboard {...screenProps} />;
+      }
+    } catch (error) {
+      console.error('Error rendering screen:', error);
+      showToast('Screen failed to load. Please try again.', 'error');
+      return <Dashboard {...screenProps} />;
+    }
+  };
+
+  // Show loading state while checking authentication
+  if (isAuthenticated === null) {
+    return (
+      <SafeAreaProvider>
+        <View style={[styles.container, { backgroundColor: theme === 'dark' ? '#0F0F23' : '#F8FAFC' }]}>
+          {/* Add a loading screen here if needed */}
+        </View>
+      </SafeAreaProvider>
+    );
+  }
+
+  // Show authentication screen if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={[styles.container, { backgroundColor: theme === 'dark' ? '#0F0F23' : '#F8FAFC' }]}>
+          <Auth theme={theme} showToast={showToast} onLogin={handleLogin} />
+          <Toast 
+            visible={toast.visible}
+            message={toast.message}
+            type={toast.type}
+            theme={theme}
           />
-          <Text style={[
-            styles.navLabel, 
-            activeTab === 'dashboard' && styles.activeNavLabel,
-            { color: activeTab === 'dashboard' ? 
-              (theme === 'dark' ? '#8B5CF6' : '#EF4444') : 
-              (theme === 'dark' ? '#9CA3AF' : '#6B7280')
-            }
-          ]}>
-            Dashboard
-          </Text>
-        </TouchableOpacity>
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
 
-        <TouchableOpacity
-          style={[styles.navItem, activeTab === 'feed' && styles.activeNavItem]}
-          onPress={() => setActiveTab('feed')}
-        >
-          <MessageSquare 
-            size={24} 
-            color={activeTab === 'feed' ? 
-              (theme === 'dark' ? '#8B5CF6' : '#EF4444') : 
-              (theme === 'dark' ? '#9CA3AF' : '#6B7280')
-            } 
+  // Show onboarding screen if user needs to complete onboarding
+  if (needsOnboarding) {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={[styles.container, { backgroundColor: theme === 'dark' ? '#0F0F23' : '#F8FAFC' }]}>
+          <OnboardingScreen theme={theme} showToast={showToast} onComplete={handleOnboardingComplete} />
+          <Toast 
+            visible={toast.visible}
+            message={toast.message}
+            type={toast.type}
+            theme={theme}
           />
-          <Text style={[
-            styles.navLabel, 
-            activeTab === 'feed' && styles.activeNavLabel,
-            { color: activeTab === 'feed' ? 
-              (theme === 'dark' ? '#8B5CF6' : '#EF4444') : 
-              (theme === 'dark' ? '#9CA3AF' : '#6B7280')
-            }
-          ]}>
-            Feed
-          </Text>
-        </TouchableOpacity>
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
 
-        <TouchableOpacity
-          style={[styles.navItem, activeTab === 'connect' && styles.activeNavItem]}
-          onPress={() => setActiveTab('connect')}
-        >
-          <Search 
-            size={24} 
-            color={activeTab === 'connect' ? 
-              (theme === 'dark' ? '#8B5CF6' : '#EF4444') : 
-              (theme === 'dark' ? '#9CA3AF' : '#6B7280')
-            } 
-          />
-          <Text style={[
-            styles.navLabel, 
-            activeTab === 'connect' && styles.activeNavLabel,
-            { color: activeTab === 'connect' ? 
-              (theme === 'dark' ? '#8B5CF6' : '#EF4444') : 
-              (theme === 'dark' ? '#9CA3AF' : '#6B7280')
-            }
-          ]}>
-            Connect
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.navItem, activeTab === 'profile' && styles.activeNavItem]}
-          onPress={() => setActiveTab('profile')}
-        >
-          <User 
-            size={24} 
-            color={activeTab === 'profile' ? 
-              (theme === 'dark' ? '#8B5CF6' : '#EF4444') : 
-              (theme === 'dark' ? '#9CA3AF' : '#6B7280')
-            } 
-          />
-          <Text style={[
-            styles.navLabel, 
-            activeTab === 'profile' && styles.activeNavLabel,
-            { color: activeTab === 'profile' ? 
-              (theme === 'dark' ? '#8B5CF6' : '#EF4444') : 
-              (theme === 'dark' ? '#9CA3AF' : '#6B7280')
-            }
-          ]}>
-            Profile
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Toast */}
-      <CustomToast 
-        visible={toast.visible} 
-        message={toast.message} 
-        type={toast.type}
-        theme={theme}
-        onHide={() => setToast({ ...toast, visible: false })} 
-      />
-    </View>
+  return (
+    <SafeAreaProvider>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme === 'dark' ? '#0F0F23' : '#F8FAFC' }]}>
+        <View style={styles.content}>
+          {renderScreen()}
+        </View>
+        <TabBar 
+          currentScreen={currentScreen} 
+          onScreenChange={setCurrentScreen}
+          theme={theme}
+        />
+        <Toast 
+          visible={toast.visible}
+          message={toast.message}
+          type={toast.type}
+          theme={theme}
+        />
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 };
 
-// Dynamic Styles Function
-const getStyles = (theme: 'dark' | 'light') => StyleSheet.create({
-  mainContainer: {
+const styles = StyleSheet.create({
+  container: {
     flex: 1,
-    backgroundColor: theme === 'dark' ? '#0F0F23' : '#F8FAFC',
   },
   content: {
     flex: 1,
   },
-  themeToggle: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 1000,
-    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
-    padding: 12,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  profilePlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-    backgroundColor: theme === 'dark' ? '#0F0F23' : '#F8FAFC',
-  },
-  placeholderTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: theme === 'dark' ? '#F9FAFB' : '#111827',
-    textAlign: 'center',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  placeholderText: {
-    fontSize: 16,
-    color: theme === 'dark' ? '#D1D5DB' : '#4B5563',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  placeholderSubtext: {
-    fontSize: 14,
-    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: theme === 'dark' ? '#374151' : '#E5E7EB',
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: theme === 'dark' ? 0.3 : 0.1,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  navItem: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderRadius: 12,
-  },
-  activeNavItem: {
-    backgroundColor: theme === 'dark' ? '#312E81' : '#FEE2E2',
-  },
-  navLabel: {
-    fontSize: 10,
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  activeNavLabel: {
-    fontWeight: '600',
-  },
-  toast: {
-    position: 'absolute',
-    top: 100,
-    left: 20,
-    right: 20,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    zIndex: 1000,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-    borderLeftWidth: 4,
-  },
-  toastText: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginLeft: 8,
-    flex: 1,
-  },
 });
 
-// Individual styles for the main container
-const styles = StyleSheet.create({
-  toast: {
-    position: 'absolute',
-    top: 100,
-    left: 20,
-    right: 20,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    zIndex: 1000,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-    borderLeftWidth: 4,
-  },
-  toastText: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginLeft: 8,
-    flex: 1,
-  },
-});
-
-export default MainApp;
+export default Main;

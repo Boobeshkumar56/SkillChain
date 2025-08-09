@@ -1,34 +1,18 @@
+import { Stack, useRouter } from "expo-router";
+import { useEffect } from "react";
+import { View } from "react-native";
 
-  import { Stack, useRouter } from "expo-router";
-import { onAuthStateChanged } from "firebase/auth";
-import { useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
-import { auth } from "../firebaseConfig";
+export default function Layout() {
+  const router = useRouter();
 
-  export default function Layout() {
-    const [loading, setLoading] = useState(false);
-    const router = useRouter();
-
-    useEffect(() => {
-  const unsubscribe = onAuthStateChanged(auth, (user) => {
-  
-    if (!user) {
+  useEffect(() => {
+    // Run navigation after initial render to avoid mounting error
+    setTimeout(() => {
       router.replace("/Auth");
-    }
-    setLoading(false);
-  });
+    }, 0);
+  }, []);
 
-  return () => unsubscribe();
-}, []);
-
-
-    if (loading) {
-      return (
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-          <ActivityIndicator size="large" />
-        </View>
-      );
-    }
-
-    return <Stack screenOptions={{headerShown:false}}/>;
-  }
+  return (
+    <Stack screenOptions={{ headerShown: false }} />
+  );
+}
