@@ -1,10 +1,10 @@
-import { Home, MessageSquare, Search, User } from 'lucide-react-native';
+import { Home, MessageSquare, Search, User, Video } from 'lucide-react-native';
 import React from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface TabBarProps {
-  currentScreen: 'dashboard' | 'feed' | 'connect' | 'profile';
-  onScreenChange: (screen: 'dashboard' | 'feed' | 'connect' | 'profile') => void;
+  currentScreen: 'dashboard' | 'feed' | 'connect' | 'profile' | 'videos';
+  onScreenChange: (screen: 'dashboard' | 'feed' | 'connect' | 'profile' | 'videos') => void;
   theme: 'dark' | 'light';
 }
 
@@ -13,6 +13,7 @@ const TabBar: React.FC<TabBarProps> = ({ currentScreen, onScreenChange, theme })
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'feed', label: 'Feed', icon: MessageSquare },
     { id: 'connect', label: 'Connect', icon: Search },
+    { id: 'videos', label: 'Videos', icon: Video },
     { id: 'profile', label: 'Profile', icon: User },
   ] as const;
 

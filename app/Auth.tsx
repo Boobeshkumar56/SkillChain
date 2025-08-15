@@ -3,17 +3,23 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-    Alert,
+    ActivityIndicator,
     Animated,
     Dimensions,
     Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    TouchableWithoutFeedback,
+    View
 } from "react-native";
-const api_url = process.env.API_URL||"http://localhost:5000/api/auth"
+import { CustomAlert } from "../components";
+import { API_URL } from "../constants";
 
 const { width, height } = Dimensions.get('window');
 
@@ -30,6 +36,12 @@ export default function AuthScreen({ theme, showToast, onLogin }: AuthProps) {
     const [password, setPassword] = useState("");
     const [name, setName] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [alertVisible, setAlertVisible] = useState(false);
+    const [alertConfig, setAlertConfig] = useState({
+        title: '',
+        message: '',
+        type: 'info' as 'success' | 'error' | 'info'
+    });
 
     // Animations
     const fadeAnim = new Animated.Value(1);
@@ -55,12 +67,17 @@ export default function AuthScreen({ theme, showToast, onLogin }: AuthProps) {
         setName("");
     };
 
+    const showAlert = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
+        setAlertConfig({ title, message, type });
+        setAlertVisible(true);
+    };
+
     const handleAuth = async () => {
         if (!email || !password || (!isLogin && !name)) {
             if (showToast) {
                 showToast("Please fill in all required fields", "error");
             } else {
-                Alert.alert("Error", "Please fill in all required fields");
+                showAlert("Error", "Please fill in all required fields", "error");
             }
             return;
         }
@@ -69,30 +86,31 @@ export default function AuthScreen({ theme, showToast, onLogin }: AuthProps) {
             if (showToast) {
                 showToast("Please enter a valid email address", "error");
             } else {
-                Alert.alert("Error", "Please enter a valid email address");
+                showAlert("Error", "Please enter a valid email address", "error");
             }
             return;
         }
 
         setIsLoading(true);
 
-        // Simulate API call
         try {
             const endpoint = isLogin ? "login" : "signup";
-            const res = await fetch(`${api_url}/${endpoint}`, {
+            const requestBody = isLogin
+                ? { email, password }
+                : { name, email, password };
+            
+            const res = await fetch(`${API_URL}/${endpoint}`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(
-                    isLogin
-                        ? { email, password }
-                        : { name, email, password } // signup includes name
-                ),
+                headers: { 
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(requestBody),
             });
 
             const data = await res.json();
 
             if (!res.ok) {
-                throw new Error(data.message);
+                throw new Error(data.message || `HTTP ${res.status}: ${res.statusText}`);
             }
 
             await AsyncStorage.setItem("token", data.token);
@@ -102,19 +120,30 @@ export default function AuthScreen({ theme, showToast, onLogin }: AuthProps) {
                 if (showToast) {
                     showToast("Login successful!", "success");
                 }
-                onLogin(); // Let Main.tsx handle onboarding check
+                // Login should go to Main page (which will handle onboarding check)
+                router.replace("/Main");
             } else {
                 if (showToast) {
                     showToast("Account created successfully!", "success");
                 }
-                onLogin(); // Let Main.tsx handle onboarding check
+                // Signup should go to onboarding page
+                router.replace("/onboarding");
             }
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : "Authentication failed";
+            let errorMessage = "Authentication failed";
+            
+            if (err instanceof TypeError && err.message.includes('Failed to fetch')) {
+                errorMessage = "Network error: Unable to connect to server. Please check your internet connection.";
+            } else if (err instanceof Error) {
+                errorMessage = err.message;
+            } else if (typeof err === 'string') {
+                errorMessage = err;
+            }
+            
             if (showToast) {
                 showToast(errorMessage, "error");
             } else {
-                Alert.alert("Auth Error", errorMessage);
+                showAlert("Auth Error", errorMessage, "error");
             }
         } finally {
             setIsLoading(false);
@@ -132,113 +161,141 @@ export default function AuthScreen({ theme, showToast, onLogin }: AuthProps) {
             colors={['#fdf2f8', '#ffffff', '#fef2f2']}
             style={styles.container}
         >
-            <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-                {/* Header */}
-                <View style={styles.header}>
-                    <Text style={styles.brand}>SkillChain</Text>
-                    <Text style={styles.slogan}>Connect through skills. Empower each other.</Text>
-                    <View style={styles.logoContainer}>
-
-                        <Image
-                            source={require("../assets/images/logo.jpg")}
-                            style={styles.logo}
-                        />
-
-                    </View>
-                </View>
-
-                {/* Form */}
-                <View style={styles.formContainer}>
-                    <View style={styles.tabContainer}>
-                        <TouchableOpacity
-                            style={[styles.tab, isLogin && styles.activeTab]}
-                            onPress={() => isLogin || toggleMode()}
-                        >
-                            <Text style={[styles.tabText, isLogin && styles.activeTabText]}>
-                                Login
-                            </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.tab, !isLogin && styles.activeTab]}
-                            onPress={() => !isLogin || toggleMode()}
-                        >
-                            <Text style={[styles.tabText, !isLogin && styles.activeTabText]}>
-                                Sign Up
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.inputContainer}>
-                        {!isLogin && (
-                            <View style={styles.inputWrapper}>
-                                <TextInput
-                                    placeholder="Full Name"
-                                    placeholderTextColor="#9ca3af"
-                                    style={styles.input}
-                                    value={name}
-                                    onChangeText={setName}
-                                />
-                            </View>
-                        )}
-
-                        <View style={styles.inputWrapper}>
-                            <TextInput
-                                placeholder="Email Address"
-                                placeholderTextColor="#9ca3af"
-                                style={styles.input}
-                                value={email}
-                                onChangeText={setEmail}
-                                keyboardType="email-address"
-                                autoCapitalize="none"
-                            />
-                        </View>
-
-                        <View style={styles.inputWrapper}>
-                            <TextInput
-                                placeholder="Password"
-                                placeholderTextColor="#9ca3af"
-                                style={styles.input}
-                                value={password}
-                                onChangeText={setPassword}
-                                secureTextEntry
-                            />
-                        </View>
-                    </View>
-
-                    <TouchableOpacity
-                        style={[styles.authButton, isLoading && styles.authButtonDisabled]}
-                        onPress={handleAuth}
-                        disabled={isLoading}
+            <KeyboardAvoidingView 
+                style={styles.keyboardAvoid} 
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                    <ScrollView 
+                        contentContainerStyle={styles.scrollContent}
+                        showsVerticalScrollIndicator={false}
+                        bounces={false}
                     >
-                        <LinearGradient
-                            colors={['#EF4444', '#dc2626']}
-                            style={styles.authButtonGradient}
-                        >
-                            <Text style={styles.authButtonText}>
-                                {isLoading ? "Please wait..." : (isLogin ? "Sign In" : "Create Account")}
-                            </Text>
-                        </LinearGradient>
-                    </TouchableOpacity>
+                        <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+                            {/* Header */}
+                            <View style={styles.header}>
+                                <Text style={styles.brand}>SkillChain</Text>
+                                <Text style={styles.slogan}>Connect through skills. Empower each other.</Text>
+                                <View style={styles.logoContainer}>
+                                    <Image
+                                        source={require("../assets/images/logo.jpg")}
+                                        style={styles.logo}
+                                    />
+                                </View>
+                            </View>
 
-                    <View style={styles.divider}>
-                        <View style={styles.dividerLine} />
-                        <Text style={styles.dividerText}>or</Text>
-                        <View style={styles.dividerLine} />
-                    </View>
+                            {/* Form */}
+                            <View style={styles.formContainer}>
+                                <View style={styles.tabContainer}>
+                                    <TouchableOpacity
+                                        style={[styles.tab, isLogin && styles.activeTab]}
+                                        onPress={() => isLogin || toggleMode()}
+                                    >
+                                        <Text style={[styles.tabText, isLogin && styles.activeTabText]}>
+                                            Login
+                                        </Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.tab, !isLogin && styles.activeTab]}
+                                        onPress={() => !isLogin || toggleMode()}
+                                    >
+                                        <Text style={[styles.tabText, !isLogin && styles.activeTabText]}>
+                                            Sign Up
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
 
-                    <TouchableOpacity style={styles.googleButton} onPress={handleAuth}>
-                        <Image
-                            source={{ uri: "https://developers.google.com/identity/images/g-logo.png" }}
-                            style={styles.googleIcon}
-                        />
-                        <Text style={styles.googleText}>Continue with Google</Text>
-                    </TouchableOpacity>
+                                <View style={styles.inputContainer}>
+                                    {!isLogin && (
+                                        <View style={styles.inputWrapper}>
+                                            <TextInput
+                                                placeholder="Full Name"
+                                                placeholderTextColor="#9ca3af"
+                                                style={styles.input}
+                                                value={name}
+                                                onChangeText={setName}
+                                                returnKeyType="next"
+                                            />
+                                        </View>
+                                    )}
 
-                    <TouchableOpacity onPress={() => router.replace("/Main")} style={styles.guestButton}>
-                        <Text style={styles.guestText}>Continue as Guest</Text>
-                    </TouchableOpacity>
-                </View>
-            </Animated.View>
+                                    <View style={styles.inputWrapper}>
+                                        <TextInput
+                                            placeholder="Email Address"
+                                            placeholderTextColor="#9ca3af"
+                                            style={styles.input}
+                                            value={email}
+                                            onChangeText={setEmail}
+                                            keyboardType="email-address"
+                                            autoCapitalize="none"
+                                            returnKeyType="next"
+                                        />
+                                    </View>
+
+                                    <View style={styles.inputWrapper}>
+                                        <TextInput
+                                            placeholder="Password"
+                                            placeholderTextColor="#9ca3af"
+                                            style={styles.input}
+                                            value={password}
+                                            onChangeText={setPassword}
+                                            secureTextEntry
+                                            returnKeyType="done"
+                                            onSubmitEditing={handleAuth}
+                                        />
+                                    </View>
+                                </View>
+
+                                <TouchableOpacity
+                                    style={[styles.authButton, isLoading && styles.authButtonDisabled]}
+                                    onPress={handleAuth}
+                                    disabled={isLoading}
+                                >
+                                    <LinearGradient
+                                        colors={['#EF4444', '#dc2626']}
+                                        style={styles.authButtonGradient}
+                                    >
+                                        {isLoading ? (
+                                            <ActivityIndicator color="#ffffff" />
+                                        ) : (
+                                            <Text style={styles.authButtonText}>
+                                                {isLogin ? "Sign In" : "Create Account"}
+                                            </Text>
+                                        )}
+                                    </LinearGradient>
+                                </TouchableOpacity>
+
+                                <View style={styles.divider}>
+                                    <View style={styles.dividerLine} />
+                                    <Text style={styles.dividerText}>or</Text>
+                                    <View style={styles.dividerLine} />
+                                </View>
+
+                                <TouchableOpacity style={styles.googleButton} onPress={handleAuth}>
+                                    <Image
+                                        source={{ uri: "https://developers.google.com/identity/images/g-logo.png" }}
+                                        style={styles.googleIcon}
+                                    />
+                                    <Text style={styles.googleText}>Continue with Google</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity onPress={() => router.replace("/Main")} style={styles.guestButton}>
+                                    <Text style={styles.guestText}>Continue as Guest</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </Animated.View>
+                    </ScrollView>
+                </TouchableWithoutFeedback>
+            </KeyboardAvoidingView>
+            
+            <CustomAlert
+                visible={alertVisible}
+                title={alertConfig.title}
+                message={alertConfig.message}
+                type={alertConfig.type}
+                onClose={() => setAlertVisible(false)}
+                theme={theme}
+            />
         </LinearGradient>
     );
 }
@@ -247,65 +304,66 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
+    keyboardAvoid: {
+        flex: 1,
+    },
+    scrollContent: {
+        flexGrow: 1,
+        minHeight: height,
+    },
     content: {
         flex: 1,
-        paddingHorizontal: 24,
-        paddingTop: height * 0.1,
+        paddingHorizontal: 20,
+        paddingTop: height * 0.08,
+        paddingBottom: 40,
     },
     header: {
         alignItems: 'center',
-        marginBottom: 40,
+        marginBottom: 30,
     },
     brand: {
-        fontSize: 42,
+        fontSize: Math.min(36, width * 0.08),
         fontWeight: "800",
         color: "#EF4444",
         marginBottom: 8,
-        letterSpacing: 2,
+        letterSpacing: 1,
         textShadowColor: 'rgba(190, 18, 60, 0.1)',
         textShadowOffset: { width: 0, height: 2 },
         textShadowRadius: 4,
     },
     slogan: {
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: "500",
         color: "#6b7280",
-        marginBottom: 30,
+        marginBottom: 20,
         textAlign: "center",
-        lineHeight: 22,
+        lineHeight: 20,
+        paddingHorizontal: 10,
     },
     logoContainer: {
-        marginBottom: 20,
-    },
-    logoGradient: {
-        padding: 12,
-        borderRadius: 25,
-        elevation: 8,
-        shadowColor: '#EF4444',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
+        marginBottom: 15,
     },
     logo: {
-        width: 80,
-        height: 80,
-
+        width: 60,
+        height: 60,
+        borderRadius: 30,
     },
     formContainer: {
         flex: 1,
+        minHeight: height * 0.6,
     },
     tabContainer: {
         flexDirection: 'row',
         backgroundColor: '#f3f4f6',
-        borderRadius: 15,
-        padding: 4,
-        marginBottom: 30,
+        borderRadius: 12,
+        padding: 3,
+        marginBottom: 20,
     },
     tab: {
         flex: 1,
-        paddingVertical: 12,
+        paddingVertical: 10,
         alignItems: 'center',
-        borderRadius: 12,
+        borderRadius: 10,
     },
     activeTab: {
         backgroundColor: '#ffffff',
@@ -316,7 +374,7 @@ const styles = StyleSheet.create({
         shadowRadius: 3,
     },
     tabText: {
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '600',
         color: '#6b7280',
     },
@@ -324,52 +382,55 @@ const styles = StyleSheet.create({
         color: '#EF4444',
     },
     inputContainer: {
-        marginBottom: 30,
+        marginBottom: 20,
     },
     inputWrapper: {
-        marginBottom: 16,
+        marginBottom: 12,
     },
     input: {
-        borderWidth: 2,
+        borderWidth: 1.5,
         borderColor: '#e5e7eb',
-        borderRadius: 15,
-        padding: 16,
-        fontSize: 16,
+        borderRadius: 12,
+        padding: 14,
+        fontSize: 15,
         backgroundColor: '#ffffff',
         color: '#1f2937',
-        elevation: 2,
+        minHeight: 50,
+        elevation: 1,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.05,
-        shadowRadius: 3,
+        shadowRadius: 2,
     },
     authButton: {
-        borderRadius: 15,
-        marginBottom: 20,
-        elevation: 4,
+        borderRadius: 12,
+        marginBottom: 15,
+        elevation: 3,
         shadowColor: '#EF4444',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 6,
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
     },
     authButtonDisabled: {
         opacity: 0.7,
     },
     authButtonGradient: {
-        paddingVertical: 16,
+        paddingVertical: 14,
         alignItems: 'center',
-        borderRadius: 15,
+        borderRadius: 12,
+        minHeight: 50,
+        justifyContent: 'center',
     },
     authButtonText: {
         color: '#ffffff',
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: '700',
         letterSpacing: 0.5,
     },
     divider: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginVertical: 20,
+        marginVertical: 15,
     },
     dividerLine: {
         flex: 1,
@@ -377,9 +438,9 @@ const styles = StyleSheet.create({
         backgroundColor: '#e5e7eb',
     },
     dividerText: {
-        marginHorizontal: 16,
+        marginHorizontal: 12,
         color: '#9ca3af',
-        fontSize: 14,
+        fontSize: 12,
         fontWeight: '500',
     },
     googleButton: {
@@ -387,35 +448,37 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         borderColor: '#e5e7eb',
-        borderWidth: 2,
-        borderRadius: 15,
-        paddingVertical: 16,
-        paddingHorizontal: 24,
-        marginBottom: 20,
+        borderWidth: 1.5,
+        borderRadius: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        marginBottom: 15,
         backgroundColor: '#ffffff',
-        elevation: 2,
+        elevation: 1,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.05,
-        shadowRadius: 3,
+        shadowRadius: 2,
+        minHeight: 50,
     },
     googleIcon: {
-        width: 24,
-        height: 24,
-        marginRight: 12,
+        width: 20,
+        height: 20,
+        marginRight: 10,
     },
     googleText: {
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '600',
         color: '#374151',
     },
     guestButton: {
         alignItems: 'center',
-        paddingVertical: 12,
+        paddingVertical: 10,
+        marginBottom: 20,
     },
     guestText: {
         color: '#EF4444',
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '600',
         textDecorationLine: 'underline',
     },

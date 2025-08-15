@@ -12,8 +12,7 @@ import {
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-
-const API_URL = process.env.API_URL || "http://localhost:5000/api/auth";
+import { API_URL } from '../constants';
 
 interface DashboardProps {
   theme: 'dark' | 'light';

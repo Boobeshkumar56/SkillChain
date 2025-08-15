@@ -2,35 +2,35 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from "expo-router";
 import {
-    Award,
-    Briefcase,
-    CheckCircle,
-    ChevronLeft,
-    ChevronRight,
-    Code,
-    GraduationCap,
-    Heart,
-    MapPin,
-    Settings,
-    Target,
-    Users,
-    Zap
+  Award,
+  Briefcase,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Code,
+  GraduationCap,
+  Heart,
+  MapPin,
+  Settings,
+  Target,
+  Users,
+  Zap
 } from 'lucide-react-native';
 import React, { useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
+import { API_URL } from '../constants';
 
 const { width } = Dimensions.get('window');
-const API_URL = process.env.API_URL || "http://localhost:5000/api/auth";
 
 interface OnboardingProps {
   theme?: 'dark' | 'light';
@@ -64,6 +64,11 @@ const OnboardingScreen: React.FC<OnboardingProps> = ({ theme = 'dark', showToast
   const [knownSkills, setKnownSkills] = useState<SkillLevel[]>([]);
   const [currentLearnings, setCurrentLearnings] = useState<CurrentLearning[]>([]);
   const [interests, setInterests] = useState<string[]>([]);
+  
+  // Social profiles
+  const [githubUsername, setGithubUsername] = useState('');
+  const [linkedinUsername, setLinkedinUsername] = useState('');
+  const [leetcodeUsername, setLeetcodeUsername] = useState('');
 
   // Temporary states for adding skills
   const [newSkill, setNewSkill] = useState('');
@@ -105,6 +110,7 @@ const OnboardingScreen: React.FC<OnboardingProps> = ({ theme = 'dark', showToast
     { title: 'Choose Your Role', subtitle: 'What best describes your role?' },
     { title: 'Experience Level', subtitle: 'How experienced are you?' },
     { title: 'About You', subtitle: 'Tell us about yourself' },
+    { title: 'Social Profiles', subtitle: 'Connect your profiles (optional)' },
     { title: 'Your Skills', subtitle: 'What technologies do you know?' },
     { title: 'Learning Goals', subtitle: 'What are you currently learning?' },
     { title: 'Interests', subtitle: 'What interests you most?' }
@@ -161,9 +167,10 @@ const OnboardingScreen: React.FC<OnboardingProps> = ({ theme = 'dark', showToast
       case 0: return selectedRole !== '';
       case 1: return experienceLevel !== '';
       case 2: return bio.trim() !== '';
-      case 3: return knownSkills.length > 0;
-      case 4: return true; // Learning goals are optional
-      case 5: return interests.length > 0;
+      case 3: return true; // Social profiles are optional
+      case 4: return knownSkills.length > 0;
+      case 5: return true; // Learning goals are optional
+      case 6: return interests.length > 0;
       default: return false;
     }
   };
@@ -204,11 +211,16 @@ const OnboardingScreen: React.FC<OnboardingProps> = ({ theme = 'dark', showToast
         knownSkills,
         currentLearnings,
         interests,
+        socialProfiles: {
+          github: githubUsername ? `https://github.com/${githubUsername}` : '',
+          linkedin: linkedinUsername ? `https://linkedin.com/in/${linkedinUsername}` : '',
+          leetcode: leetcodeUsername ? `https://leetcode.com/${leetcodeUsername}` : '',
+        },
         onboardingComplete: true
       };
 
-      const response = await fetch(`${API_URL}/update-profile`, {
-        method: 'PUT',
+      const response = await fetch(`${API_URL}/onboarding`, {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -358,6 +370,73 @@ const OnboardingScreen: React.FC<OnboardingProps> = ({ theme = 'dark', showToast
             onChangeText={setLocation}
           />
         </View>
+      </View>
+    </View>
+  );
+
+  const renderSocialProfiles = () => (
+    <View style={styles.stepContainer}>
+      <Text style={styles.stepTitle}>Social Profiles</Text>
+      <Text style={styles.stepSubtitle}>Connect your professional profiles (all optional)</Text>
+      
+      <View style={styles.inputContainer}>
+        <Text style={styles.inputLabel}>GitHub Username</Text>
+        <View style={styles.inputWithIcon}>
+          <Code size={20} color={theme === 'dark' ? '#9CA3AF' : '#6B7280'} />
+          <TextInput
+            style={styles.textInput}
+            placeholder="your-github-username"
+            placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
+            value={githubUsername}
+            onChangeText={setGithubUsername}
+            autoCapitalize="none"
+          />
+        </View>
+        {githubUsername && (
+          <Text style={styles.profilePreview}>
+            Profile: github.com/{githubUsername}
+          </Text>
+        )}
+      </View>
+
+      <View style={styles.inputContainer}>
+        <Text style={styles.inputLabel}>LinkedIn Username</Text>
+        <View style={styles.inputWithIcon}>
+          <Users size={20} color={theme === 'dark' ? '#9CA3AF' : '#6B7280'} />
+          <TextInput
+            style={styles.textInput}
+            placeholder="your-linkedin-username"
+            placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
+            value={linkedinUsername}
+            onChangeText={setLinkedinUsername}
+            autoCapitalize="none"
+          />
+        </View>
+        {linkedinUsername && (
+          <Text style={styles.profilePreview}>
+            Profile: linkedin.com/in/{linkedinUsername}
+          </Text>
+        )}
+      </View>
+
+      <View style={styles.inputContainer}>
+        <Text style={styles.inputLabel}>LeetCode Username</Text>
+        <View style={styles.inputWithIcon}>
+          <Target size={20} color={theme === 'dark' ? '#9CA3AF' : '#6B7280'} />
+          <TextInput
+            style={styles.textInput}
+            placeholder="your-leetcode-username"
+            placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
+            value={leetcodeUsername}
+            onChangeText={setLeetcodeUsername}
+            autoCapitalize="none"
+          />
+        </View>
+        {leetcodeUsername && (
+          <Text style={styles.profilePreview}>
+            Profile: leetcode.com/{leetcodeUsername}
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -551,9 +630,10 @@ const OnboardingScreen: React.FC<OnboardingProps> = ({ theme = 'dark', showToast
       case 0: return renderRoleSelection();
       case 1: return renderExperienceLevel();
       case 2: return renderAbout();
-      case 3: return renderSkills();
-      case 4: return renderLearning();
-      case 5: return renderInterests();
+      case 3: return renderSocialProfiles();
+      case 4: return renderSkills();
+      case 5: return renderLearning();
+      case 6: return renderInterests();
       default: return null;
     }
   };
@@ -787,6 +867,12 @@ const getStyles = (theme: 'dark' | 'light') => StyleSheet.create({
     color: theme === 'dark' ? '#F9FAFB' : '#111827',
     fontSize: 16,
     paddingVertical: 16,
+  },
+  profilePreview: {
+    fontSize: 12,
+    color: theme === 'dark' ? '#8B5CF6' : '#EF4444',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   addSkillContainer: {
     backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',

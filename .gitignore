@@ -1,40 +1,128 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
+# Dependencies
 node_modules/
+.pnp/
+.pnp.js
 
 # Expo
 .expo/
 dist/
 web-build/
 expo-env.d.ts
-
-# Native
-.kotlin/
-*.orig.*
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
+*.orig.*
+
+# Android/IntelliJ
+android/build/
+android/app/build/
+android/app/debug/
+android/app/release/
+android/.gradle/
+android/.idea/
+android/local.properties
+.idea/
+.gradle/
+local.properties
+*.iml
+*.hprof
+
+# iOS
+ios/build/
+ios/Pods/
+ios/*.xcworkspace
+ios/*.xcodeproj/*
+!ios/*.xcodeproj/project.pbxproj
+!ios/*.xcodeproj/xcshareddata/
+!ios/*.xcworkspace/contents.xcworkspacedata
+*.ipa
+*.dSYM.zip
+*.dSYM
 
 # Metro
 .metro-health-check*
+.metro-cache/
 
-# debug
+# Debug logs
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+debug.log
+.vscode/.react/
 
-# macOS
-.DS_Store
-*.pem
+# Build
+build/
+dist/
+out/
+web-build/
 
-# local env files
-.env*.local
+# Environment
+.env
+.env.local
+.env.development
+.env.test
+.env.production
 Backend/.env
 
-# typescript
+# TypeScript
 *.tsbuildinfo
+tsconfig.tsbuildinfo
 
-app-example
+# Testing
+coverage/
+__tests__/coverage/
+.jest/
+jest-test-results.json
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+*.bak
+
+# Temporary files
+*.log
+*.tmp
+*.temp
+tmp/
+temp/
+
+# App specific
+app-example/
+google-services.json
+GoogleService-Info.plist
+
+# React Native specific
+*.bundle
+*.map
+.watchmanconfig
+index.android.bundle
+index.ios.bundle
+
+# Firebase
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+# CocoaPods
+ios/Pods/
+ios/Podfile.lock

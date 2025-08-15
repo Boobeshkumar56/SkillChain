@@ -1,11 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { AlertCircle, Award, Calendar, CheckCircle, Github, Globe, LogOut, Moon, Pencil, Plus, Sun, Trash2 } from 'lucide-react-native';
+import { AlertCircle, Award, Calendar, CheckCircle, Github, Globe, Instagram, Linkedin, LogOut, Moon, Pencil, Plus, Sun, Trash2, Twitter, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Alert, Animated, Image, Linking, Modal, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, ToastAndroid, TouchableOpacity, View } from 'react-native';
 
+import { API_URL } from '../constants';
+
 const defaultAvatar = 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y';
-const API_URL = process.env.API_URL || "http://localhost:5000/api/auth";
 
 interface ProfileProps {
   theme?: 'dark' | 'light';
@@ -71,6 +72,18 @@ export default function Profile({ theme = 'dark', showToast, toggleTheme }: Prof
   const [projectModalVisible, setProjectModalVisible] = useState(false);
   const [newProject, setNewProject] = useState({ title: '', description: '', github: '', live: '' });
   
+  // Social media state
+  const [socialProfiles, setSocialProfiles] = useState({
+    github: '',
+    linkedin: '',
+    twitter: '',
+    instagram: '',
+    website: ''
+  });
+  const [socialModalVisible, setSocialModalVisible] = useState(false);
+  const [socialType, setSocialType] = useState('');
+  const [socialUrl, setSocialUrl] = useState('');
+  
   // Toast state
   const [toast, setToast] = useState<{
     visible: boolean;
@@ -110,6 +123,15 @@ export default function Profile({ theme = 'dark', showToast, toggleTheme }: Prof
           setSkills(skillNames);
         }
         if (userData.projects) setProjects(userData.projects);
+        if (userData.socialProfiles) {
+          setSocialProfiles({
+            github: userData.socialProfiles.github || '',
+            linkedin: userData.socialProfiles.linkedin || '',
+            twitter: userData.socialProfiles.twitter || '',
+            instagram: userData.socialProfiles.instagram || '',
+            website: userData.socialProfiles.website || ''
+          });
+        }
       } else {
         handleShowToast('Failed to fetch user data', 'error');
       }
@@ -189,6 +211,72 @@ export default function Profile({ theme = 'dark', showToast, toggleTheme }: Prof
     handleShowToast('Project added successfully!');
   };
 
+  const handleSocialPlatform = (platform: string, currentUrl?: string) => {
+    setSocialType(platform.toLowerCase());
+    setSocialUrl(currentUrl || '');
+    setSocialModalVisible(true);
+  };
+
+  const handleRemoveSocial = async (platform: string) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/social-profiles`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          [platform]: '', // Empty string removes the profile
+        }),
+      });
+
+      if (response.ok) {
+        setSocialProfiles(prev => ({ ...prev, [platform]: '' }));
+        handleShowToast(`${platform} profile removed`);
+      }
+    } catch (error) {
+      handleShowToast('Failed to remove social profile', 'error');
+    }
+  };
+
+  const saveSocialProfile = async () => {
+    if (!socialUrl.trim()) {
+      handleShowToast('Please enter a URL', 'error');
+      return;
+    }
+
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/social-profiles`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          [socialType]: socialUrl,
+        }),
+      });
+
+      if (response.ok) {
+        setSocialProfiles(prev => ({ ...prev, [socialType]: socialUrl }));
+        setSocialModalVisible(false);
+        setSocialUrl('');
+        setSocialType('');
+        handleShowToast(`${socialType} profile updated!`);
+      } else {
+        handleShowToast('Failed to update social profile', 'error');
+      }
+    } catch (error) {
+      handleShowToast('Failed to update social profile', 'error');
+    }
+  };
+
   const updateBio = async (newBio: string) => {
     try {
       const token = await AsyncStorage.getItem('token');
@@ -212,6 +300,34 @@ export default function Profile({ theme = 'dark', showToast, toggleTheme }: Prof
     } catch (error) {
       console.error('Error updating bio:', error);
       handleShowToast('Error updating bio', 'error');
+    }
+  };
+
+  const updateSocialProfile = async (platform: keyof typeof socialProfiles, value: string) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+      
+      const updateData = { [platform]: value };
+      
+      const response = await fetch(`${API_URL}/social-profiles`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      if (response.ok) {
+        setSocialProfiles(prev => ({ ...prev, [platform]: value }));
+        handleShowToast(`${platform.charAt(0).toUpperCase() + platform.slice(1)} updated successfully!`);
+      } else {
+        handleShowToast(`Failed to update ${platform}`, 'error');
+      }
+    } catch (error) {
+      console.error(`Error updating ${platform}:`, error);
+      handleShowToast(`Error updating ${platform}`, 'error');
     }
   };
 
@@ -317,6 +433,103 @@ export default function Profile({ theme = 'dark', showToast, toggleTheme }: Prof
         </View>
       </View>
 
+      {/* Social Media Section */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Social Profiles</Text>
+        
+        <View style={styles.socialContainer}>
+          <TouchableOpacity 
+            style={styles.socialButton}
+            onPress={() => handleSocialPlatform('LinkedIn', socialProfiles.linkedin)}
+          >
+            <Linkedin size={20} color={socialProfiles.linkedin ? (theme === 'dark' ? '#8B5CF6' : '#EF4444') : '#666'} />
+            <Text style={[styles.socialText, !socialProfiles.linkedin && styles.placeholderText]}>
+              {socialProfiles.linkedin ? 'LinkedIn' : 'Add LinkedIn'}
+            </Text>
+            {socialProfiles.linkedin && (
+              <TouchableOpacity 
+                onPress={() => handleRemoveSocial('linkedin')}
+                style={styles.removeBtn}
+              >
+                <X size={14} color="#ff4444" />
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.socialButton}
+            onPress={() => handleSocialPlatform('GitHub', socialProfiles.github)}
+          >
+            <Github size={20} color={socialProfiles.github ? (theme === 'dark' ? '#8B5CF6' : '#EF4444') : '#666'} />
+            <Text style={[styles.socialText, !socialProfiles.github && styles.placeholderText]}>
+              {socialProfiles.github ? 'GitHub' : 'Add GitHub'}
+            </Text>
+            {socialProfiles.github && (
+              <TouchableOpacity 
+                onPress={() => handleRemoveSocial('github')}
+                style={styles.removeBtn}
+              >
+                <X size={14} color="#ff4444" />
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.socialButton}
+            onPress={() => handleSocialPlatform('Instagram', socialProfiles.instagram)}
+          >
+            <Instagram size={20} color={socialProfiles.instagram ? (theme === 'dark' ? '#8B5CF6' : '#EF4444') : '#666'} />
+            <Text style={[styles.socialText, !socialProfiles.instagram && styles.placeholderText]}>
+              {socialProfiles.instagram ? 'Instagram' : 'Add Instagram'}
+            </Text>
+            {socialProfiles.instagram && (
+              <TouchableOpacity 
+                onPress={() => handleRemoveSocial('instagram')}
+                style={styles.removeBtn}
+              >
+                <X size={14} color="#ff4444" />
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.socialButton}
+            onPress={() => handleSocialPlatform('Twitter', socialProfiles.twitter)}
+          >
+            <Twitter size={20} color={socialProfiles.twitter ? (theme === 'dark' ? '#8B5CF6' : '#EF4444') : '#666'} />
+            <Text style={[styles.socialText, !socialProfiles.twitter && styles.placeholderText]}>
+              {socialProfiles.twitter ? 'Twitter' : 'Add Twitter'}
+            </Text>
+            {socialProfiles.twitter && (
+              <TouchableOpacity 
+                onPress={() => handleRemoveSocial('twitter')}
+                style={styles.removeBtn}
+              >
+                <X size={14} color="#ff4444" />
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.socialButton}
+            onPress={() => handleSocialPlatform('Website', socialProfiles.website)}
+          >
+            <Globe size={20} color={socialProfiles.website ? (theme === 'dark' ? '#8B5CF6' : '#EF4444') : '#666'} />
+            <Text style={[styles.socialText, !socialProfiles.website && styles.placeholderText]}>
+              {socialProfiles.website ? 'Website' : 'Add Website'}
+            </Text>
+            {socialProfiles.website && (
+              <TouchableOpacity 
+                onPress={() => handleRemoveSocial('website')}
+                style={styles.removeBtn}
+              >
+                <X size={14} color="#ff4444" />
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Projects Section */}
       <View style={styles.card}>
         <View style={styles.cardHeader}>
@@ -419,6 +632,34 @@ export default function Profile({ theme = 'dark', showToast, toggleTheme }: Prof
               </TouchableOpacity>
               <TouchableOpacity onPress={addProject} style={styles.saveBtn}>
                 <Text style={styles.saveText}>Add Project</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={socialModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Add {socialType.charAt(0).toUpperCase() + socialType.slice(1)} Profile</Text>
+            <TextInput 
+              placeholder={`Enter your ${socialType} URL`}
+              placeholderTextColor={theme === 'dark' ? '#9CA3AF' : '#6B7280'}
+              value={socialUrl} 
+              onChangeText={setSocialUrl}
+              style={styles.modalInput}
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                onPress={() => setSocialModalVisible(false)} 
+                style={styles.cancelBtn}
+              >
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={saveSocialProfile} style={styles.saveBtn}>
+                <Text style={styles.saveText}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -765,5 +1006,80 @@ const getStyles = (theme: 'dark' | 'light') => StyleSheet.create({
     fontWeight: '500',
     marginLeft: 8,
     flex: 1,
+  },
+  socialItem: {
+    marginBottom: 16,
+    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: theme === 'dark' ? '#374151' : '#E5E7EB',
+  },
+  socialHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  socialLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme === 'dark' ? '#F9FAFB' : '#111827',
+  },
+  socialInput: {
+    borderWidth: 1,
+    borderColor: theme === 'dark' ? '#374151' : '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: theme === 'dark' ? '#F9FAFB' : '#111827',
+    backgroundColor: theme === 'dark' ? '#111827' : '#FFFFFF',
+  },
+  socialValue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: theme === 'dark' ? '#111827' : '#F9FAFB',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme === 'dark' ? '#374151' : '#E5E7EB',
+  },
+  socialText: {
+    fontSize: 14,
+    color: theme === 'dark' ? '#9CA3AF' : '#6B7280',
+  },
+  placeholderText: {
+    fontSize: 14,
+    color: theme === 'dark' ? '#6B7280' : '#9CA3AF',
+    fontStyle: 'italic',
+  },
+  socialContainer: {
+    paddingVertical: 8,
+  },
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginVertical: 4,
+    backgroundColor: theme === 'dark' ? '#1F2937' : '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme === 'dark' ? '#374151' : '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  removeBtn: {
+    marginLeft: 8,
+    padding: 4,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 68, 68, 0.1)',
   },
 });

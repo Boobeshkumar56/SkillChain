@@ -57,10 +57,39 @@ const ConnectionSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   status: {
     type: String,
-    enum: ["requested", "connected", "blocked"],
-    default: "requested",
+    enum: ["pending", "connected", "blocked"],
+    default: "pending",
   },
   connectedAt: { type: Date },
+}, { timestamps: true });
+
+const VideoSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  description: { type: String, required: true },
+  category: { type: String, required: true },
+  difficulty: {
+    type: String,
+    enum: ["beginner", "intermediate", "advanced"],
+    default: "beginner",
+  },
+  duration: { type: Number, default: 0 }, // in minutes
+  thumbnailUrl: { type: String },
+  videoUrl: { type: String },
+  tags: [String],
+  status: {
+    type: String,
+    enum: ["pending", "approved", "rejected"],
+    default: "pending",
+  },
+  aiAnalysis: {
+    complexity: { type: Number, min: 1, max: 10 },
+    suggestedTokens: { type: Number, default: 0 },
+    feedback: { type: String }
+  },
+  views: { type: Number, default: 0 },
+  likes: { type: Number, default: 0 },
+  uploadedAt: { type: Date, default: Date.now },
+  approvedAt: { type: Date }
 }, { timestamps: true });
 
 const UserSchema = new mongoose.Schema(
@@ -94,6 +123,18 @@ const UserSchema = new mongoose.Schema(
 
     // Connections
     connections: [ConnectionSchema],
+    
+    // Video Content (for educators)
+    videos: [VideoSchema],
+    
+    // Social Profiles
+    socialProfiles: {
+      github: { type: String },
+      linkedin: { type: String },
+      twitter: { type: String },
+      instagram: { type: String },
+      website: { type: String },
+    },
     
     // System fields
     tokens: { type: Number, default: 0 },

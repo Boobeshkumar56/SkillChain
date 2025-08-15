@@ -23,13 +23,22 @@ router.post("/signup", async (req, res) => {
       name,
       email,
       password: hashedPassword,
+      onboardingComplete: false,
+      isActive: true,
+      createdAt: new Date(),
+      lastActiveAt: new Date(),
       ...rest,
     });
 
     await user.save();
 
     const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
-    res.status(201).json({ user, token });
+    
+    // Return user without password
+    const userResponse = user.toObject();
+    delete userResponse.password;
+    
+    res.status(201).json({ user: userResponse, token });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -46,9 +55,18 @@ router.post("/login", async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
+    // Update last active time
+    user.lastActiveAt = new Date();
+    user.isActive = true;
+    await user.save();
+
     const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "7d" });
 
-    return res.status(200).json({ user, token });
+    // Return user without password
+    const userResponse = user.toObject();
+    delete userResponse.password;
+
+    return res.status(200).json({ user: userResponse, token });
 
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -70,41 +88,55 @@ router.get("/verify-token", authMiddleware, async (req, res) => {
   }
 });
 
-// @route   POST /api/onboarding
-// @desc    only works when signup is done 
+// @route   POST /api/auth/onboarding
+// @desc    Complete multi-step onboarding process
 router.post("/onboarding", authMiddleware, async (req, res) => {
-  const {
-    name,
-    bio,
-    knownSkills,
-    learningSkills,
-    selectedRole,
-    experienceLevel,
-    company,
-    projects,
-  } = req.body;
-
   try {
+    const {
+      selectedRole,
+      experienceLevel,
+      bio,
+      location,
+      knownSkills,
+      currentLearnings,
+      interests
+    } = req.body;
+
+    // Validate required fields
+    if (!selectedRole || !experienceLevel || !bio || !knownSkills || knownSkills.length === 0) {
+      return res.status(400).json({ 
+        message: "Role, experience level, bio, and at least one skill are required" 
+      });
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
       req.user.id,
       {
-        name,
-        bio,
-        knownSkills,
-        learningSkills,
         selectedRole,
         experienceLevel,
-        company,
-        projects: projects?.filter(p => p.name?.trim()),
-        onboardingComplete:true // filter empty project names
+        bio,
+        location: location || '',
+        knownSkills: knownSkills || [],
+        currentLearnings: currentLearnings || [],
+        interests: interests || [],
+        onboardingComplete: true,
+        isActive: true,
+        lastActiveAt: new Date()
       },
       { new: true }
-    );
+    ).select('-password');
 
-    return res.status(200).json({ user: updatedUser });
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json({ 
+      user: updatedUser,
+      message: "Onboarding completed successfully"
+    });
   } catch (err) {
-    console.error("Onboarding update error:", err);
-    return res.status(500).json({ error: "Failed to update onboarding data" });
+    console.error("Onboarding completion error:", err);
+    return res.status(500).json({ error: "Failed to complete onboarding" });
   }
 });
 
@@ -121,16 +153,31 @@ router.get("/profile", authMiddleware, async (req, res) => {
 });
 
 // @route   PUT /api/auth/update-profile
-// @desc    Update user profile data
+// @desc    Update user profile data (for profile page editing)
 router.put("/update-profile", authMiddleware, async (req, res) => {
   try {
-    const { bio, knownSkills, learningSkills, projects } = req.body;
+    const { 
+      bio, 
+      location,
+      knownSkills, 
+      currentLearnings, 
+      interests,
+      selectedRole,
+      experienceLevel,
+      socialProfiles
+    } = req.body;
     
     const updateData = {};
     if (bio !== undefined) updateData.bio = bio;
+    if (location !== undefined) updateData.location = location;
     if (knownSkills !== undefined) updateData.knownSkills = knownSkills;
-    if (learningSkills !== undefined) updateData.learningSkills = learningSkills;
-    if (projects !== undefined) updateData.projects = projects;
+    if (currentLearnings !== undefined) updateData.currentLearnings = currentLearnings;
+    if (interests !== undefined) updateData.interests = interests;
+    if (selectedRole !== undefined) updateData.selectedRole = selectedRole;
+    if (experienceLevel !== undefined) updateData.experienceLevel = experienceLevel;
+    if (socialProfiles !== undefined) updateData.socialProfiles = socialProfiles;
+
+    updateData.lastActiveAt = new Date();
 
     const user = await User.findByIdAndUpdate(
       req.user.id,
@@ -142,10 +189,49 @@ router.put("/update-profile", authMiddleware, async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
     
-    return res.status(200).json(user);
+    return res.status(200).json({ 
+      user,
+      message: "Profile updated successfully" 
+    });
   } catch (err) {
     console.error("Profile update error:", err);
     return res.status(500).json({ error: "Failed to update profile data" });
+  }
+});
+
+// @route   PUT /api/auth/social-profiles
+// @desc    Update user social profiles individually
+router.put("/social-profiles", authMiddleware, async (req, res) => {
+  try {
+    const { github, linkedin, twitter, instagram, website } = req.body;
+    
+    const socialProfiles = {};
+    if (github !== undefined) socialProfiles.github = github;
+    if (linkedin !== undefined) socialProfiles.linkedin = linkedin;
+    if (twitter !== undefined) socialProfiles.twitter = twitter;
+    if (instagram !== undefined) socialProfiles.instagram = instagram;
+    if (website !== undefined) socialProfiles.website = website;
+
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { 
+        socialProfiles,
+        lastActiveAt: new Date()
+      },
+      { new: true }
+    ).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    
+    return res.status(200).json({ 
+      user,
+      message: "Social profiles updated successfully" 
+    });
+  } catch (err) {
+    console.error("Social profiles update error:", err);
+    return res.status(500).json({ error: "Failed to update social profiles" });
   }
 });
 
@@ -441,9 +527,9 @@ router.post("/feed", authMiddleware, async (req, res) => {
   }
 });
 
-// @route   PUT /api/auth/feed/:id/like
-// @desc    Toggle like on a feed post
-router.put("/feed/:id/like", authMiddleware, async (req, res) => {
+// @route   POST/DELETE /api/auth/feed/:id/like
+// @desc    Like/Unlike a feed post
+router.post("/feed/:id/like", authMiddleware, async (req, res) => {
   try {
     const feed = await Feed.findById(req.params.id);
     if (!feed) {
@@ -453,27 +539,46 @@ router.put("/feed/:id/like", authMiddleware, async (req, res) => {
     const userId = req.user.id;
     const isLiked = feed.likes.includes(userId);
     
-    if (isLiked) {
-      feed.likes.pull(userId);
-    } else {
+    if (!isLiked) {
       feed.likes.push(userId);
+      await feed.save();
+      return res.status(200).json({ 
+        likes: feed.likes.length,
+        isLiked: true 
+      });
+    } else {
+      return res.status(400).json({ message: "Post already liked" });
     }
-    
+  } catch (err) {
+    console.error("Like feed error:", err);
+    return res.status(500).json({ error: "Failed to like post" });
+  }
+});
+
+router.delete("/feed/:id/like", authMiddleware, async (req, res) => {
+  try {
+    const feed = await Feed.findById(req.params.id);
+    if (!feed) {
+      return res.status(404).json({ message: "Feed post not found" });
+    }
+
+    const userId = req.user.id;
+    feed.likes.pull(userId);
     await feed.save();
     
     return res.status(200).json({ 
       likes: feed.likes.length,
-      isLiked: !isLiked 
+      isLiked: false 
     });
   } catch (err) {
-    console.error("Like feed error:", err);
-    return res.status(500).json({ error: "Failed to toggle like" });
+    console.error("Unlike feed error:", err);
+    return res.status(500).json({ error: "Failed to unlike post" });
   }
 });
 
-// @route   PUT /api/auth/feed/:id/save
-// @desc    Toggle save on a feed post
-router.put("/feed/:id/save", authMiddleware, async (req, res) => {
+// @route   POST/DELETE /api/auth/feed/:id/save
+// @desc    Save/Unsave a feed post
+router.post("/feed/:id/save", authMiddleware, async (req, res) => {
   try {
     const feed = await Feed.findById(req.params.id);
     if (!feed) {
@@ -483,20 +588,34 @@ router.put("/feed/:id/save", authMiddleware, async (req, res) => {
     const userId = req.user.id;
     const isSaved = feed.savedBy.includes(userId);
     
-    if (isSaved) {
-      feed.savedBy.pull(userId);
-    } else {
+    if (!isSaved) {
       feed.savedBy.push(userId);
+      await feed.save();
+      return res.status(200).json({ isSaved: true });
+    } else {
+      return res.status(400).json({ message: "Post already saved" });
     }
-    
-    await feed.save();
-    
-    return res.status(200).json({ 
-      isSaved: !isSaved 
-    });
   } catch (err) {
     console.error("Save feed error:", err);
-    return res.status(500).json({ error: "Failed to toggle save" });
+    return res.status(500).json({ error: "Failed to save post" });
+  }
+});
+
+router.delete("/feed/:id/save", authMiddleware, async (req, res) => {
+  try {
+    const feed = await Feed.findById(req.params.id);
+    if (!feed) {
+      return res.status(404).json({ message: "Feed post not found" });
+    }
+
+    const userId = req.user.id;
+    feed.savedBy.pull(userId);
+    await feed.save();
+    
+    return res.status(200).json({ isSaved: false });
+  } catch (err) {
+    console.error("Unsave feed error:", err);
+    return res.status(500).json({ error: "Failed to unsave post" });
   }
 });
 
@@ -580,8 +699,20 @@ router.post("/connect-request", authMiddleware, async (req, res) => {
       User.findById(userId)
     ]);
 
+    if (!currentUser) {
+      return res.status(404).json({ message: "Current user not found" });
+    }
+
     if (!targetUser) {
       return res.status(404).json({ message: "User not found" });
+    }
+
+    // Initialize connections array if it doesn't exist
+    if (!currentUser.connections) {
+      currentUser.connections = [];
+    }
+    if (!targetUser.connections) {
+      targetUser.connections = [];
     }
 
     // Check if connection already exists
@@ -599,12 +730,12 @@ router.post("/connect-request", authMiddleware, async (req, res) => {
     // Add connection request to both users
     currentUser.connections.push({
       user: userId,
-      status: 'requested',
+      status: 'pending',
     });
 
     targetUser.connections.push({
       user: req.user.id,
-      status: 'requested',
+      status: 'pending',
     });
 
     await Promise.all([currentUser.save(), targetUser.save()]);
@@ -613,6 +744,46 @@ router.post("/connect-request", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("Connect request error:", err);
     return res.status(500).json({ error: "Failed to send connection request" });
+  }
+});
+
+// @route   POST /api/auth/reject-connection
+// @desc    Reject connection request
+router.post("/reject-connection", authMiddleware, async (req, res) => {
+  try {
+    const { userId } = req.body;
+    
+    const [currentUser, targetUser] = await Promise.all([
+      User.findById(req.user.id),
+      User.findById(userId)
+    ]);
+
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Initialize connections array if it doesn't exist
+    if (!currentUser.connections) {
+      currentUser.connections = [];
+    }
+    if (!targetUser.connections) {
+      targetUser.connections = [];
+    }
+
+    // Remove connection from both users
+    currentUser.connections = currentUser.connections.filter(
+      conn => conn.user.toString() !== userId
+    );
+    targetUser.connections = targetUser.connections.filter(
+      conn => conn.user.toString() !== req.user.id
+    );
+
+    await Promise.all([currentUser.save(), targetUser.save()]);
+    
+    return res.status(200).json({ message: "Connection request rejected" });
+  } catch (err) {
+    console.error("Reject connection error:", err);
+    return res.status(500).json({ error: "Failed to reject connection" });
   }
 });
 
@@ -666,7 +837,12 @@ router.get("/connections", authMiddleware, async (req, res) => {
     const user = await User.findById(req.user.id)
       .populate('connections.user', 'name email selectedRole photoURL isActive lastSeen');
 
-    let connections = user.connections;
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Initialize connections array if it doesn't exist
+    let connections = user.connections || [];
     
     if (status !== 'all') {
       connections = connections.filter(conn => conn.status === status);
@@ -692,6 +868,14 @@ router.put("/accept-connection", authMiddleware, async (req, res) => {
 
     if (!targetUser) {
       return res.status(404).json({ message: "User not found" });
+    }
+
+    // Initialize connections array if it doesn't exist
+    if (!currentUser.connections) {
+      currentUser.connections = [];
+    }
+    if (!targetUser.connections) {
+      targetUser.connections = [];
     }
 
     // Update connection status for both users
@@ -750,12 +934,27 @@ router.get('/users', authMiddleware, async (req, res) => {
     }
 
     const users = await User.find(query)
-      .select('name email selectedRole experienceLevel bio photoURL knownSkills location isActive lastActiveAt')
+      .select('name email selectedRole experienceLevel bio photoURL knownSkills location isActive lastActiveAt socialProfiles')
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort({ lastActiveAt: -1 });
 
-    res.json({ users, total: users.length });
+    // Get current user's connections
+    const currentUser = await User.findById(userId).populate('connections.user');
+    const connections = currentUser.connections || [];
+
+    // Add connection status to each user
+    const usersWithStatus = users.map(user => {
+      const userObj = user.toObject();
+      const connection = connections.find(
+        conn => conn.user._id.toString() === user._id.toString()
+      );
+      
+      userObj.connectionStatus = connection ? connection.status : 'none';
+      return userObj;
+    });
+
+    res.json({ users: usersWithStatus, total: usersWithStatus.length });
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ message: 'Server error' });
@@ -766,7 +965,7 @@ router.get('/users', authMiddleware, async (req, res) => {
 router.post('/ai-match', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
-    const currentUser = await User.findById(userId);
+    const currentUser = await User.findById(userId).populate('connections.user');
 
     if (!currentUser) {
       return res.status(404).json({ message: 'User not found' });
@@ -783,9 +982,11 @@ router.post('/ai-match', authMiddleware, async (req, res) => {
         { selectedRole: userRole },
         { 'knownSkills.skill': { $in: userSkills } }
       ]
-    }).select('name email selectedRole experienceLevel bio photoURL knownSkills location isActive lastActiveAt');
+    }).select('name email selectedRole experienceLevel bio photoURL knownSkills location isActive lastActiveAt socialProfiles');
 
-    // Calculate match scores
+    const connections = currentUser.connections || [];
+
+    // Calculate match scores and add connection status
     const matches = potentialMatches.map(user => {
       let score = 0;
       
@@ -805,9 +1006,16 @@ router.post('/ai-match', authMiddleware, async (req, res) => {
         score += 10;
       }
 
+      // Check connection status
+      const connection = connections.find(
+        conn => conn.user._id.toString() === user._id.toString()
+      );
+      const connectionStatus = connection ? connection.status : 'none';
+
       return {
         ...user.toObject(),
-        matchScore: Math.min(100, score)
+        matchScore: Math.min(100, score),
+        connectionStatus
       };
     });
 
@@ -877,5 +1085,192 @@ router.post('/chat', authMiddleware, async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+
+// @route   GET /api/auth/educator/videos
+// @desc    Get educator's uploaded videos
+router.get("/educator/videos", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Initialize videos array if it doesn't exist
+    const videos = user.videos || [];
+    
+    return res.status(200).json({ videos });
+  } catch (err) {
+    console.error("Get videos error:", err);
+    return res.status(500).json({ error: "Failed to fetch videos" });
+  }
+});
+
+// @route   POST /api/auth/educator/upload-video
+// @desc    Upload new video content
+router.post("/educator/upload-video", authMiddleware, async (req, res) => {
+  try {
+    const {
+      title,
+      description,
+      category,
+      difficulty,
+      estimatedDuration,
+      tags
+    } = req.body;
+
+    if (!title || !description || !category) {
+      return res.status(400).json({ 
+        message: "Title, description, and category are required" 
+      });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Initialize videos array if it doesn't exist
+    if (!user.videos) {
+      user.videos = [];
+    }
+
+    const newVideo = {
+      title,
+      description,
+      category,
+      difficulty: difficulty || 'beginner',
+      duration: estimatedDuration || 0,
+      tags: tags || [],
+      status: 'pending',
+      views: 0,
+      likes: 0,
+      uploadedAt: new Date()
+    };
+
+    user.videos.push(newVideo);
+    await user.save();
+
+    // Get the created video with its ID
+    const createdVideo = user.videos[user.videos.length - 1];
+    
+    return res.status(201).json({ 
+      video: createdVideo,
+      message: "Video uploaded successfully" 
+    });
+  } catch (err) {
+    console.error("Upload video error:", err);
+    return res.status(500).json({ error: "Failed to upload video" });
+  }
+});
+
+// @route   POST /api/auth/educator/analyze-video/:id
+// @desc    AI analyze video content
+router.post("/educator/analyze-video/:id", authMiddleware, async (req, res) => {
+  try {
+    const videoId = req.params.id;
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const video = user.videos.id(videoId);
+    if (!video) {
+      return res.status(404).json({ message: "Video not found" });
+    }
+
+    // Simulate AI analysis
+    const aiAnalysis = {
+      complexity: Math.floor(Math.random() * 10) + 1, // 1-10
+      suggestedTokens: Math.floor(Math.random() * 100) + 50, // 50-150
+      feedback: generateAIFeedback(video.difficulty, video.category)
+    };
+
+    video.aiAnalysis = aiAnalysis;
+    video.status = 'approved'; // Auto-approve for demo
+    video.approvedAt = new Date();
+    
+    await user.save();
+    
+    return res.status(200).json({ 
+      aiAnalysis,
+      message: "AI analysis completed" 
+    });
+  } catch (err) {
+    console.error("AI analysis error:", err);
+    return res.status(500).json({ error: "Failed to analyze video" });
+  }
+});
+
+// @route   GET /api/auth/videos/feed
+// @desc    Get approved videos for feed
+router.get("/videos/feed", authMiddleware, async (req, res) => {
+  try {
+    const users = await User.find(
+      { "videos.status": "approved" },
+      { 
+        name: 1, 
+        selectedRole: 1, 
+        photoURL: 1,
+        videos: { $elemMatch: { status: "approved" } }
+      }
+    ).limit(10);
+
+    const videos = users.flatMap(user => 
+      user.videos.map(video => ({
+        ...video.toObject(),
+        educator: {
+          _id: user._id,
+          name: user.name,
+          selectedRole: user.selectedRole,
+          photoURL: user.photoURL
+        }
+      }))
+    ).sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+
+    return res.status(200).json({ videos });
+  } catch (err) {
+    console.error("Get feed videos error:", err);
+    return res.status(500).json({ error: "Failed to fetch feed videos" });
+  }
+});
+
+function generateAIFeedback(difficulty, category) {
+  const feedbacks = {
+    beginner: [
+      "Great introductory content! Clear explanations and good pacing for beginners.",
+      "Well-structured for newcomers. Consider adding more practical examples.",
+      "Perfect for beginners! The step-by-step approach is very helpful."
+    ],
+    intermediate: [
+      "Good intermediate-level content. Covers important concepts effectively.",
+      "Well-balanced content for intermediate learners. Good depth of coverage.",
+      "Solid intermediate material. Could benefit from more advanced examples."
+    ],
+    advanced: [
+      "Excellent advanced content! Complex topics explained clearly.",
+      "High-quality advanced material. Great for experienced learners.",
+      "Outstanding depth and complexity. Perfect for advanced practitioners."
+    ]
+  };
+
+  const categoryBonus = {
+    'Web Development': "Great web development insights!",
+    'Mobile Development': "Valuable mobile development techniques!",
+    'Data Science': "Excellent data science methodology!",
+    'Machine Learning': "Strong ML concepts and applications!",
+    'DevOps': "Practical DevOps knowledge!",
+    'UI/UX Design': "Great design principles!",
+    'Programming Fundamentals': "Solid programming foundations!",
+    'Database Management': "Excellent database concepts!",
+    'Cybersecurity': "Important security insights!",
+    'Other': "Valuable educational content!"
+  };
+
+  const baseFeedback = feedbacks[difficulty][Math.floor(Math.random() * feedbacks[difficulty].length)];
+  const bonus = categoryBonus[category] || categoryBonus['Other'];
+  
+  return `${baseFeedback} ${bonus}`;
+}
 
 module.exports = router;

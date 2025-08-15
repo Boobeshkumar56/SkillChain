@@ -8,6 +8,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Health check for API
+app.get("/api-check", (req, res) => {
+    res.json({ 
+        message: "SkillChain API endpoints are working!", 
+        timestamp: new Date().toISOString() 
+    });
+});
+
 try {
     mongoose.connect(process.env.MONGO_URI);
     console.log("MongoDB connected successfully");

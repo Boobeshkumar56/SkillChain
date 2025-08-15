@@ -2,13 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useState } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { TabBar, Toast } from '../components';
+import { LoadingScreen, TabBar, Toast } from '../components';
 import Auth from './Auth';
 import Connect from './connect';
 import Dashboard from './Dashboard';
 import Feed from './Feed';
 import OnboardingScreen from './onboarding';
 import Profile from './Profile';
+import VideoUpload from './VideoUpload';
 
 type Theme = 'dark' | 'light';
 
@@ -18,14 +19,15 @@ interface ToastState {
   type: 'success' | 'error';
 }
 
-const API_URL = process.env.API_URL || "http://localhost:5000/api/auth";
+import { API_URL } from '../constants';
 
 const Main: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean>(false);
-  const [currentScreen, setCurrentScreen] = useState<'dashboard' | 'feed' | 'connect' | 'profile'>('dashboard');
+  const [currentScreen, setCurrentScreen] = useState<'dashboard' | 'feed' | 'connect' | 'profile' | 'videos'>('dashboard');
   const [theme, setTheme] = useState<Theme>('dark');
-    const [toast, setToast] = useState<{message: string, type: 'success' | 'error' | 'info', visible: boolean}>({
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [toast, setToast] = useState<{message: string, type: 'success' | 'error' | 'info', visible: boolean}>({
     message: '',
     type: 'info',
     visible: false,
@@ -48,17 +50,24 @@ const Main: React.FC = () => {
 
   const initializeApp = async () => {
     try {
-      // Load theme preference
+      setIsInitializing(true);
+
+      // Load theme preference first (fastest operation)
       const savedTheme = await AsyncStorage.getItem('theme');
       if (savedTheme === 'light' || savedTheme === 'dark') {
         setTheme(savedTheme as Theme);
       }
 
-      // Check authentication status
+      // Check authentication status (this can be slow due to network)
       await verifyAuthToken();
     } catch (error) {
       console.error('Error initializing app:', error);
       setIsAuthenticated(false);
+    } finally {
+      // Ensure loading screen is shown for at least 10 seconds
+      setTimeout(() => {
+        setIsInitializing(false);
+      }, 10000);
     }
   };
 
@@ -73,7 +82,7 @@ const Main: React.FC = () => {
         return;
       }
 
-      // Check if user needs onboarding
+      // Check if user needs onboarding first (local check)
       const userData = JSON.parse(user);
       if (!userData.onboardingComplete) {
         setIsAuthenticated(true);
@@ -81,33 +90,45 @@ const Main: React.FC = () => {
         return;
       }
 
-      // Verify token with server
-      const response = await fetch(`${API_URL}/verify-token`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      // Set authenticated immediately for better UX, verify in background
+      setIsAuthenticated(true);
+      setNeedsOnboarding(false);
 
-      if (response.ok) {
-        setIsAuthenticated(true);
-        setNeedsOnboarding(false);
-      } else {
-        // Token is invalid, clear storage
-        await AsyncStorage.multiRemove(['token', 'user']);
-        setIsAuthenticated(false);
-        setNeedsOnboarding(false);
+      // Verify token with server in background (non-blocking)
+      try {
+        const response = await fetch(`${API_URL}/verify-token`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          // Token is invalid, clear storage and redirect to auth
+          await AsyncStorage.multiRemove(['token', 'user']);
+          setIsAuthenticated(false);
+          setNeedsOnboarding(false);
+          showToast('Session expired. Please login again.', 'error');
+        }
+      } catch (networkError) {
+        // Allow user to continue offline, just log the error
+        console.warn('Network error during token verification:', networkError);
       }
     } catch (error) {
       console.error('Error verifying token:', error);
-      // On network error, allow user to continue if token exists
+      // On any error, allow user to continue if token exists locally
       const token = await AsyncStorage.getItem('token');
       const user = await AsyncStorage.getItem('user');
       if (token && user) {
-        const userData = JSON.parse(user);
-        setIsAuthenticated(true);
-        setNeedsOnboarding(!userData.onboardingComplete);
+        try {
+          const userData = JSON.parse(user);
+          setIsAuthenticated(true);
+          setNeedsOnboarding(!userData.onboardingComplete);
+        } catch (parseError) {
+          setIsAuthenticated(false);
+          setNeedsOnboarding(false);
+        }
       } else {
         setIsAuthenticated(false);
         setNeedsOnboarding(false);
@@ -214,6 +235,8 @@ const Main: React.FC = () => {
           return <Feed {...screenProps} />;
         case 'connect':
           return <Connect {...screenProps} />;
+        case 'videos':
+          return <VideoUpload {...screenProps} />;
         case 'profile':
           return <Profile {...screenProps} theme={theme} toggleTheme={toggleTheme} onLogout={handleLogout} />;
         default:
@@ -226,13 +249,14 @@ const Main: React.FC = () => {
     }
   };
 
-  // Show loading state while checking authentication
-  if (isAuthenticated === null) {
+  // Show loading state while initializing app
+  if (isInitializing || isAuthenticated === null) {
     return (
       <SafeAreaProvider>
-        <View style={[styles.container, { backgroundColor: theme === 'dark' ? '#0F0F23' : '#F8FAFC' }]}>
-          {/* Add a loading screen here if needed */}
-        </View>
+        <LoadingScreen 
+          message="Connecting to SkillChain..."
+          theme={theme}
+        />
       </SafeAreaProvider>
     );
   }
