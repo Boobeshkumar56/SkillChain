@@ -1,50 +1,94 @@
-# Welcome to your Expo app 👋
+# SkillChain
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+SkillChain is a cross-platform educational and networking app for developers, educators, and students. It enables educators to upload video content, users to connect and network, and everyone to explore a feed of educational resources and community posts.
 
-## Get started
+## Features
 
-1. Install dependencies
+- **Educator Video Uploads:** Educators can upload video content, which is analyzed by AI for complexity and quality.
+- **Video Feed:** Users see a horizontal scroll of educational videos at the top of the feed, with metadata like duration, difficulty, and views.
+- **Community Posts:** Users can view, like, and interact with community posts.
+- **User Networking:** Discover and connect with other developers, designers, data scientists, and students. Filter by skills, experience, and location.
+- **AI Matching:** Find relevant connections using AI-powered matching.
+- **Profile Management:** Users and educators have detailed profiles with skills, experience, and social links.
+- **Mock Data Demo Mode:** When backend APIs are unavailable, the app uses realistic mock data for videos, users, and posts.
 
+## Tech Stack
+
+- **Frontend:** React Native (TypeScript), Expo
+- **Backend:** Node.js, Express, MongoDB (Mongoose)
+- **Authentication:** JWT, AsyncStorage
+- **UI:** Lucide React Native icons, custom components
+- **AI Analysis:** Simulated in frontend for demo mode
+
+## Folder Structure
+
+```
+app/                # Main app screens and navigation
+  Feed.tsx          # Main feed with videos and posts
+  VideoUpload.tsx   # Educator video upload and management
+  connect.tsx       # User networking and connections
+  Profile.tsx       # User profile
+  Auth.tsx          # Authentication
+  Main.tsx          # App entry and navigation
+components/         # Reusable UI components
+Backend/            # Node.js/Express backend
+  Server.js         # Main server file
+  Models/           # Mongoose models
+  Routes/           # API routes
+assets/             # Images and fonts
+android/ios/        # Native platform code
+```
+
+## Getting Started
+
+1. **Install dependencies:**
    ```bash
    npm install
    ```
-
-2. Start the app
-
+2. **Start the app:**
    ```bash
    npx expo start
    ```
+3. **Run backend (optional):**
+   ```bash
+   cd Backend
+   npm install
+   node Server.js
+   ```
 
-In the output, you'll find options to open the app in a
+## Usage
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- **Educator:** Go to the Video Upload page, add new content, and view AI analysis.
+- **User:** Browse the feed, watch videos, interact with posts, and connect with others.
+- **Demo Mode:** If backend APIs are unavailable, the app will display mock data for all main features.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Environment & Configuration
 
-## Get a fresh project
+- Place API keys and secrets in `.env` files (see `.gitignore`).
+- For Firebase, add `google-services.json` (Android) and `GoogleService-Info.plist` (iOS) to the respective folders.
 
-When you're ready, run:
+## Contributing
 
-```bash
-npm run reset-project
-```
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Open a pull request
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## License
 
-## Learn more
+MIT
 
-To learn more about developing your project with Expo, look at the following resources:
+## Authors
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- Boobesh Kumar (Boobeshkumar56)
+- Contributors welcome!
 
-## Join the community
+## Contact & Community
 
-Join our community of developers creating universal apps.
+- [Expo Documentation](https://docs.expo.dev/)
+- [React Native Docs](https://reactnative.dev/)
+- [Discord Community](https://chat.expo.dev)
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+---
+
+SkillChain: Empowering developers and educators to learn, connect, and grow together.
