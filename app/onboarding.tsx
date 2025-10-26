@@ -208,15 +208,12 @@ const OnboardingScreen: React.FC<OnboardingProps> = ({ theme = 'dark', showToast
         experienceLevel,
         bio,
         location,
-        knownSkills,
+        knownSkills: knownSkills.map(skill => ({
+          skill: skill.skill,
+          experience: skill.level
+        })),
         currentLearnings,
-        interests,
-        socialProfiles: {
-          github: githubUsername ? `https://github.com/${githubUsername}` : '',
-          linkedin: linkedinUsername ? `https://linkedin.com/in/${linkedinUsername}` : '',
-          leetcode: leetcodeUsername ? `https://leetcode.com/${leetcodeUsername}` : '',
-        },
-        onboardingComplete: true
+        interests
       };
 
       const response = await fetch(`${API_URL}/onboarding`, {
